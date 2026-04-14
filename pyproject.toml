@@ -1,0 +1,8 @@
+[project]
+name = "commonplace"
+version = "0.1.0"
+description = "Extract LLM conversation transcripts into structured personal wiki pages."
+requires-python = ">=3.9"
+
+[tool.commonplace]
+wiki_dir = "wiki"
