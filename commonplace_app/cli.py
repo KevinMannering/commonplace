@@ -7,9 +7,9 @@ import unicodedata
 from datetime import datetime
 from pathlib import Path
 
-from .extractor import DEFAULT_MODEL, ExtractionError, extract_session
+from .extractor import ExtractionError
 from .ingest import InputError, load_input
-from .markdown import render_markdown
+from .service import generate_wiki_markdown
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -61,23 +61,18 @@ def main(argv=None) -> int:
     wiki_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        extracted = extract_session(
+        result = generate_wiki_markdown(
             transcript=loaded.transcript,
             session_type=args.session_type,
             title_hint=args.title or loaded.title_hint,
+            transcript_source=loaded.source_label,
         )
     except ExtractionError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
-    output_path = build_output_path(wiki_dir, extracted["title"])
-    markdown = render_markdown(
-        data=extracted,
-        session_type=args.session_type,
-        transcript_path=loaded.source_label,
-        model=extracted.get("_model", DEFAULT_MODEL),
-    )
-    output_path.write_text(markdown, encoding="utf-8")
+    output_path = build_output_path(wiki_dir, result["title"])
+    output_path.write_text(result["markdown"], encoding="utf-8")
 
     print(output_path)
     return 0

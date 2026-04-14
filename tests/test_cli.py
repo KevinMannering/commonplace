@@ -18,14 +18,9 @@ class CliTests(unittest.TestCase):
     def test_main_writes_output(self):
         fake_result = {
             "title": "Commonplace Thesis",
-            "summary": "A durable memory layer for LLM work.",
-            "decisions": [{"decision": "Start with a CLI", "reasoning": "Fastest path to value."}],
-            "assumptions": [],
-            "challenges": [],
-            "open_questions": [],
-            "pivots": [],
-            "named_concepts": [{"name": "Victorian Library", "description": "Personal, curated knowledge store."}],
-            "_model": "gpt-5.4",
+            "generated_at": "2026-04-14T00:00:00+00:00",
+            "model": "gpt-5.4",
+            "markdown": "# Commonplace Thesis\n\n[[Victorian Library]]\n",
         }
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -38,7 +33,7 @@ class CliTests(unittest.TestCase):
             loaded.title_hint = ""
 
             with mock.patch("commonplace_app.cli.load_input", return_value=loaded):
-                with mock.patch("commonplace_app.cli.extract_session", return_value=fake_result):
+                with mock.patch("commonplace_app.cli.generate_wiki_markdown", return_value=fake_result):
                     exit_code = cli.main(
                         [
                             "extract",
@@ -61,15 +56,9 @@ class CliTests(unittest.TestCase):
     def test_main_accepts_url_input(self):
         fake_result = {
             "title": "Shared Chat Thesis",
-            "summary": "A shared link became the simplest intake path.",
-            "claims": [],
-            "evidence": [],
-            "sources": [],
-            "gaps": [],
-            "conclusions": [],
-            "pivots": [],
-            "named_concepts": [],
-            "_model": "gpt-5.4",
+            "generated_at": "2026-04-14T00:00:00+00:00",
+            "model": "gpt-5.4",
+            "markdown": "source_transcript: https://chatgpt.com/share/example\n",
         }
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -79,7 +68,7 @@ class CliTests(unittest.TestCase):
             loaded.title_hint = "Shared chat"
 
             with mock.patch("commonplace_app.cli.load_input", return_value=loaded):
-                with mock.patch("commonplace_app.cli.extract_session", return_value=fake_result):
+                with mock.patch("commonplace_app.cli.generate_wiki_markdown", return_value=fake_result):
                     exit_code = cli.main(
                         [
                             "extract",
