@@ -4,7 +4,7 @@ Let the Wiki Win.
 
 Commonplace helps you keep the thinking from your best LLM conversations instead of losing it when the chat ends.
 
-Commonplace is a CLI-first tool for turning meaningful LLM conversations into durable wiki pages.
+Commonplace turns meaningful LLM conversations into durable wiki pages.
 
 Phase 1 only does one job:
 
