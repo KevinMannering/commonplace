@@ -1,5 +1,5 @@
 ---
-title: From research-loop productization to Commonplace wiki capture
+title: Commonplace birth conversation wiki 
 session_type: strategy
 generated_at: 2026-04-14T03:25:25.498144+00:00
 source_transcript: https://claude.ai/share/49d79bd5-a77b-4d50-989b-d5e89a98e8b8
