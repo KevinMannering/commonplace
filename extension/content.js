@@ -1,4 +1,4 @@
-const DEFAULT_ENDPOINT = "https://api.commonplace.so/extract";
+const DEFAULT_ENDPOINT = "http://localhost:8000/extract";
 const ROOT_ID = "commonplace-root";
 
 function normalizeWhitespace(text) {

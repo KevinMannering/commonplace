@@ -82,6 +82,17 @@ Then:
 - select the `commonplace/extension` folder
 - open the extension options page and set your API endpoint and API key
 
+For local development, the extension now defaults to:
+
+```text
+http://localhost:8000/extract
+```
+
+and the manifest already allows:
+
+- `http://localhost/*`
+- `http://127.0.0.1/*`
+
 ## Server
 
 The API server lives in `server/` and exposes:
