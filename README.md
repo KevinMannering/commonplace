@@ -1,176 +1,73 @@
 # Commonplace
 
-Let the Wiki Win.
+Commonplace is a modern commonplace book: a personal library of things worth
+keeping, stored in git.
 
-Commonplace helps you keep the thinking from your best LLM conversations instead of losing it when the chat ends.
+It is built to hold durable knowledge rather than passing notes. The book grows
+by selection: source material is gathered, judged in context, and either kept or
+left aside.
 
-Commonplace turns meaningful LLM conversations into durable wiki pages.
+## What it is
 
-It now includes:
+A commonplace book is a record of what is worth keeping.
 
-- a Chrome extension for Claude and ChatGPT
-- a FastAPI server that turns transcripts into markdown wiki pages
+Unlike a journal, which records what happened, Commonplace is meant to preserve
+ideas, frameworks, observations, and bodies of knowledge that remain useful over
+time. This repository contains both the library itself and the small CLI that
+helps draft new additions to it.
 
-Phase 1 only does one job:
+## Structure
 
-- Take a conversation transcript as input
-- Extract the important thinking with a schema matched to the session type
-- Write a clean markdown page into `wiki/`
+```text
+commonplace/
+├── README.md
+├── pyproject.toml
+├── .gitignore
+├── book/
+├── inbox/
+└── commonplace/
+```
 
-## Supported session types
+`book/` is the curated library itself. It holds the entries that have already
+been judged worth keeping.
 
-- `strategy`: decisions, assumptions, challenges, open questions
-- `research`: claims, evidence, sources, gaps, conclusions
+`inbox/` is the holding tray. It contains proposals awaiting judgment. Nothing
+there is part of the permanent book yet.
 
-Both session types also capture:
+`commonplace/` is the ingestion CLI package. It reads source files, compares
+them against lightweight context from the existing book, and drafts a proposal
+for review.
 
-- pivots
-- named concepts or frameworks
+## Workflow
+
+V1 works in four steps:
+
+1. Ingest a markdown, text, or PDF source file.
+2. Extract its text and compare it against the existing book.
+3. Generate a structured proposal for a new entry, an addition to an existing
+   entry, or a case that should be flagged for judgment.
+4. Render that proposal into markdown and write it into `inbox/`.
+
+From there, review stays human. A proposal is accepted into `book/`, revised, or
+discarded.
 
 ## Usage
 
-Run from the `commonplace/` directory:
+The CLI currently exposes one command:
 
 ```bash
-python3 -m commonplace_app.cli extract --type strategy --input ./examples/strategy-transcript.md
+commonplace ingest <file> [-m "why this matters"] [--model <model>]
 ```
 
-Or hand it a shared chat URL directly:
+The command reads the source file, builds book context from `book/_index.md`,
+`book/_topics.md`, and existing entry titles, then writes a proposal markdown
+file into `inbox/`.
 
-```bash
-python3 -m commonplace_app.cli extract --type strategy --input "https://chatgpt.com/share/..."
-```
+## Purpose
 
-Or pipe a transcript in:
+The aim of Commonplace is to build a lifelong, queryable library of specialized
+knowledge.
 
-```bash
-cat transcript.txt | python3 -m commonplace_app.cli extract --type research --title "Consumer health landscape"
-```
-
-`--input` now accepts:
-
-- a local transcript file
-- a ChatGPT shared chat URL
-- a Claude shared chat URL
-- stdin when omitted or set to `-`
-
-## Chrome Extension
-
-The extension lives in `extension/` and supports:
-
-- `https://claude.ai/*`
-- `https://chatgpt.com/*`
-
-What it does:
-
-- injects a `Save to Commonplace` button near the conversation input
-- prompts for session type and optional title
-- scrapes the conversation from the page DOM
-- sends it to your configured API endpoint
-- downloads the returned markdown wiki page
-
-To load it in Chrome:
-
-```bash
-chrome://extensions
-```
-
-Then:
-
-- enable Developer Mode
-- click `Load unpacked`
-- select the `commonplace/extension` folder
-- open the extension options page and set your API endpoint and API key
-
-For local development, the extension now defaults to:
-
-```text
-http://localhost:8000/extract
-```
-
-and the manifest already allows:
-
-- `http://localhost/*`
-- `http://127.0.0.1/*`
-
-## Server
-
-The API server lives in `server/` and exposes:
-
-```text
-POST /extract
-```
-
-Request body:
-
-```json
-{
-  "transcript": "User: ...",
-  "session_type": "strategy",
-  "title": "Optional title"
-}
-```
-
-Auth header:
-
-```text
-X-API-Key: your_api_key
-```
-
-Response body:
-
-```json
-{
-  "markdown": "# ...",
-  "title": "Page title",
-  "generated_at": "2026-04-14T00:00:00+00:00"
-}
-```
-
-Run locally:
-
-```bash
-pip install -r server/requirements.txt
-export OPENAI_API_KEY=your_openai_key
-export COMMONPLACE_SERVER_API_KEY=your_server_key
-uvicorn server.main:app --reload
-```
-
-This is designed to be deployable on Railway or Fly.io.
-
-## Environment
-
-Set an OpenAI API key before running:
-
-```bash
-export OPENAI_API_KEY=your_key_here
-```
-
-Optional:
-
-```bash
-export COMMONPLACE_MODEL=gpt-5.4
-```
-
-## Output
-
-Generated pages are written to:
-
-```text
-./wiki/
-```
-
-Each page includes:
-
-- frontmatter
-- a concise summary
-- structured sections based on session type
-- wiki-style concept links like `[[Decision Journal]]`
-
-## Development
-
-Run tests:
-
-```bash
-python3 -m unittest discover -s tests
-```
+It is a way of preserving what is worth returning to, connecting related ideas
+over time, and letting thought compound instead of disappearing into old chats,
+saved files, or scattered notes.
