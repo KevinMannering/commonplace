@@ -92,6 +92,12 @@ class Proposal(BaseModel):
     confidence: ConfidenceLevel = Field(
         description="The model's confidence in the proposal."
     )
+    needs_escalation: bool = Field(
+        description=(
+            "Whether this proposal should be handed to the larger model for a "
+            "second pass because the case is ambiguous, incomplete, or low confidence."
+        )
+    )
 
     @model_validator(mode="after")
     def validate_action_requirements(self) -> Proposal:
@@ -136,7 +142,9 @@ material in relation to what the book already contains, not in isolation.
 
 Return structured output that matches the schema exactly. Do not add extra
 fields. If you choose `append-to`, include `target_entry`. If you choose
-`new-entry`, include `draft_title`.
+`new-entry`, include `draft_title`. Set `needs_escalation` to `true` when the
+source is fragmentary, the append target is ambiguous, the confidence is low, or
+the case should receive a more careful second pass from the larger model.
 """.strip()
 
 

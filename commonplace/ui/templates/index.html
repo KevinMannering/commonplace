@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Commonplace</title>
+    <style>
+      {% include "_library.css" %}
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="masthead">
+        <div class="masthead-inner">
+          <div class="wordmark">
+            <svg class="wordmark-mark" viewBox="0 0 48 48" aria-hidden="true">
+              <path d="M12 36V12h24v24H12Z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M18 31V17h4.5l5.5 8.8V17H32v14h-4.3l-5.7-9V31H18Z" fill="currentColor"/>
+              <path d="M9 39h30" fill="none" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            <div>
+              <h1 class="wordmark-text">Commonplace</h1>
+            </div>
+          </div>
+          <div class="masthead-meta">
+            <span class="masthead-stat">Inbox <strong id="inbox-count">{{ inbox_count }}</strong></span>
+            <span class="masthead-stat">Last Sync <strong id="last-sync" title="{{ last_sync_time or '' }}">{{ last_sync_time or "never" }}</strong></span>
+            <button id="sync-book" class="primary">Sync Book</button>
+          </div>
+        </div>
+        <div class="masthead-rule"></div>
+      </header>
+      <main class="layout">
+        <section class="pane left-pane">
+          <p class="section-label">Inbox Catalogue</p>
+          <div id="dropzone" class="dropzone fade-in">
+            <p class="dropzone-title">Deposit Manuscripts Here — PDF or Markdown</p>
+            <p class="dropzone-copy">Drop source files onto the tray or choose them from disk for ingestion into the holding queue.</p>
+            <input id="file-input" type="file" multiple accept=".pdf,.md">
+            <label class="file-prompt chrome" for="file-input">Choose Files</label>
+          </div>
+          <ul id="upload-status" class="upload-status"></ul>
+          <div class="catalog">
+            <div id="inbox-list" class="inbox-list"></div>
+          </div>
+        </section>
+        <section class="pane right-pane">
+          <div id="detail-root" class="detail-shell fade-in"></div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const initialItems = {{ items|tojson }};
+      const initialDetail = {{ selected|tojson }};
+
+      const inboxListEl = document.getElementById("inbox-list");
+      const detailRootEl = document.getElementById("detail-root");
+      const inboxCountEl = document.getElementById("inbox-count");
+      const lastSyncEl = document.getElementById("last-sync");
+      const uploadStatusEl = document.getElementById("upload-status");
+      const dropzoneEl = document.getElementById("dropzone");
+      const fileInputEl = document.getElementById("file-input");
+      let bookEntries = [];
+
+      let items = initialItems;
+      let selectedFilename = initialDetail ? initialDetail.filename : (items[0]?.filename || null);
+      let currentDetail = initialDetail;
+      let editMode = false;
+      let editState = null;
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      function badgeHtml(text, extraClass = "") {
+        return `<span class="badge ${extraClass}">${escapeHtml(text)}</span>`;
+      }
+
+      function formatSyncTimestamp(value) {
+        if (!value) {
+          return { text: "never", title: "" };
+        }
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) {
+          return { text: value, title: value };
+        }
+        const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+        const day = parsed.getDate();
+        const month = months[parsed.getMonth()];
+        const year = parsed.getFullYear();
+        const hours24 = parsed.getHours();
+        const minutes = String(parsed.getMinutes()).padStart(2, "0");
+        const meridiem = hours24 >= 12 ? "PM" : "AM";
+        const hours12 = hours24 % 12 || 12;
+        return {
+          text: `${day} ${month} ${year}, ${hours12}:${minutes} ${meridiem}`,
+          title: value,
+        };
+      }
+
+      function updateLastSyncDisplay(value) {
+        const formatted = formatSyncTimestamp(value);
+        lastSyncEl.textContent = formatted.text;
+        if (formatted.title) {
+          lastSyncEl.title = formatted.title;
+        } else {
+          lastSyncEl.removeAttribute("title");
+        }
+      }
+
+      function labelValueHtml(label, value) {
+        return `
+          <div class="colophon-row">
+            <div class="colophon-label">${escapeHtml(label)}</div>
+            <div class="colophon-value">${escapeHtml(value || "—")}</div>
+          </div>
+        `;
+      }
+
+      function renderInboxList() {
+        if (!items.length) {
+          inboxListEl.innerHTML = `<div class="empty-state">No inbox proposals.</div>`;
+          return;
+        }
+
+        inboxListEl.innerHTML = items.map(item => `
+          <article class="proposal-card ${item.filename === selectedFilename ? "active" : ""}" data-filename="${escapeHtml(item.filename)}">
+            <h3>${escapeHtml(item.title)}</h3>
+            <div class="card-meta">
+              ${badgeHtml(item.action.replaceAll("-", " "), `action-${item.action}`)}
+              ${badgeHtml(item.confidence)}
+              ${item.escalation_triggers.length ? `<span class="catalog-note">${escapeHtml(item.escalation_triggers.join(" · "))}</span>` : ""}
+            </div>
+            <div class="muted chrome">${escapeHtml(item.filename)}</div>
+          </article>
+        `).join("");
+
+        inboxListEl.querySelectorAll(".proposal-card").forEach(card => {
+          card.addEventListener("click", () => {
+            selectedFilename = card.dataset.filename;
+            renderInboxList();
+            loadDetail(selectedFilename);
+          });
+        });
+      }
+
+      function renderDetail(detail) {
+        currentDetail = detail;
+        if (!detail) {
+          detailRootEl.innerHTML = `
+            <div class="detail-shell empty-page fade-in">
+              <div class="blank-page">
+                <div class="empty-state">Select an inbox proposal to review it.</div>
+              </div>
+            </div>
+          `;
+          return;
+        }
+        if (editMode && editState) {
+          renderEditDetail(detail);
+          return;
+        }
+
+        const proposal = detail.proposal;
+        const colophonRows = [
+          ["Title", proposal.title],
+          ["Kind", proposal.kind],
+          ["Topics", proposal.topics.length ? proposal.topics.join(", ") : "—"],
+          ["Why Kept", proposal.why_kept],
+          ["Action", proposal.action],
+          ["Confidence", proposal.confidence],
+          ["Escalation", proposal.escalation_triggers.length ? proposal.escalation_triggers.join(", ") : "none"],
+          ["Target Entry", detail.resolved_target_entry_path || proposal.target_entry || "—"],
+        ];
+
+        detailRootEl.innerHTML = `
+          <div class="detail-header">
+            <div>
+              <h2>${escapeHtml(proposal.title)}</h2>
+              <div class="card-meta">
+                ${badgeHtml(proposal.action.replaceAll("-", " "), `action-${proposal.action}`)}
+                ${badgeHtml(proposal.confidence)}
+                ${proposal.escalation_triggers.length ? `<span class="catalog-note">${escapeHtml(proposal.escalation_triggers.join(" · "))}</span>` : ""}
+              </div>
+              <p class="detail-subtitle">A reviewed proposal awaiting editorial judgment.</p>
+            </div>
+            <button id="edit-toggle">Edit</button>
+          </div>
+          <div class="colophon">
+            ${colophonRows.map(([label, value]) => labelValueHtml(label, value)).join("")}
+          </div>
+          <div class="detail-actions">
+            <button id="promote-button" class="primary" ${proposal.action === "flag-for-judgment" ? "disabled" : ""}>Promote</button>
+            <button id="promote-copy-button" class="warning" ${proposal.action === "flag-for-judgment" ? "disabled" : ""}>Promote (copy)</button>
+            <button id="discard-button" class="danger">Discard</button>
+          </div>
+          <div class="source-note">
+            <div class="colophon-label">Source</div>
+            <div>${escapeHtml(detail.source.file || "—")}</div>
+            <div class="muted">${escapeHtml(detail.source.source_path || "")}</div>
+          </div>
+          <article class="markdown-body">${detail.body_html}</article>
+        `;
+
+        const promoteButton = document.getElementById("promote-button");
+        const promoteCopyButton = document.getElementById("promote-copy-button");
+        const discardButton = document.getElementById("discard-button");
+        const editToggle = document.getElementById("edit-toggle");
+
+        if (promoteButton) promoteButton.onclick = () => promoteSelected(false);
+        if (promoteCopyButton) promoteCopyButton.onclick = () => promoteSelected(true);
+        if (discardButton) discardButton.onclick = () => discardSelected();
+        if (editToggle) editToggle.onclick = () => enterEditMode(detail);
+      }
+
+      function renderEditDetail(detail) {
+        const proposal = detail.proposal;
+        const targetOptions = [`<option value="">Choose a target entry</option>`]
+          .concat(bookEntries.map(entry => `<option value="${escapeHtml(entry.title)}" ${entry.title === editState.target_entry ? "selected" : ""}>${escapeHtml(entry.title)}</option>`))
+          .join("");
+        const saveDisabled = !editState.title.trim()
+          || !editState.kind.trim()
+          || !editState.why_kept.trim()
+          || !editState.body.trim()
+          || !editState.action.trim()
+          || (editState.action === "append-to" && !editState.target_entry)
+          || !isDirty(detail, editState);
+
+        detailRootEl.innerHTML = `
+          <div class="detail-header">
+            <div>
+              <h2>Editing ${escapeHtml(proposal.title)}</h2>
+              <p class="detail-subtitle">Changes remain in the inbox until you explicitly promote them into the book.</p>
+            </div>
+            <button id="cancel-edit">Cancel</button>
+          </div>
+          <div class="edit-grid">
+            <div class="field">
+              <label for="edit-title">Title</label>
+              <input id="edit-title" type="text" value="${escapeHtml(editState.title)}">
+            </div>
+            <div class="field">
+              <label for="edit-kind">Kind</label>
+              <select id="edit-kind">
+                ${["thinker","project-study","field-study","idea-study"].map(kind => `<option value="${kind}" ${kind === editState.kind ? "selected" : ""}>${kind}</option>`).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label for="edit-action">Action</label>
+              <select id="edit-action">
+                ${["new-entry","append-to","flag-for-judgment"].map(action => `<option value="${action}" ${action === editState.action ? "selected" : ""}>${action}</option>`).join("")}
+              </select>
+            </div>
+            <div id="target-entry-field" class="field" style="${editState.action === "append-to" ? "" : "display:none;"}">
+              <label for="edit-target-entry">Target entry</label>
+              <select id="edit-target-entry">${targetOptions}</select>
+            </div>
+            <div class="field field-wide">
+              <label for="edit-topics">Topics</label>
+              <input id="edit-topics" type="text" value="${escapeHtml(editState.topics)}">
+            </div>
+            <div class="field field-wide">
+              <label for="edit-why-kept">Why kept</label>
+              <textarea id="edit-why-kept">${escapeHtml(editState.why_kept)}</textarea>
+            </div>
+            <div class="field">
+              <label for="edit-body">Markdown body</label>
+              <textarea id="edit-body" class="editor-body">${escapeHtml(editState.body)}</textarea>
+            </div>
+            <div class="field preview-shell">
+              <label>Live preview</label>
+              <div id="edit-preview" class="edit-preview"></div>
+            </div>
+          </div>
+          <div class="detail-actions">
+            <button id="save-edit" class="primary" ${saveDisabled ? "disabled" : ""}>Save</button>
+            <button id="promote-button" class="primary" disabled>Promote</button>
+            <button id="promote-copy-button" class="warning" disabled>Promote (copy)</button>
+            <button id="discard-button" class="danger" disabled>Discard</button>
+          </div>
+        `;
+
+        bindEditForm(detail);
+        renderEditPreview();
+      }
+
+      async function refreshInbox() {
+        const response = await fetch("/inbox");
+        const payload = await response.json();
+        items = payload.items;
+        inboxCountEl.textContent = payload.inbox_count;
+        updateLastSyncDisplay(payload.last_sync_time);
+        if (!items.find(item => item.filename === selectedFilename)) {
+          selectedFilename = items[0]?.filename || null;
+        }
+        renderInboxList();
+        if (selectedFilename) {
+          await loadDetail(selectedFilename);
+        } else {
+          renderDetail(null);
+        }
+      }
+
+      async function loadDetail(filename) {
+        const response = await fetch(`/inbox/${encodeURIComponent(filename)}`);
+        if (!response.ok) {
+          renderDetail(null);
+          return;
+        }
+        const detail = await response.json();
+        renderDetail(detail);
+      }
+
+      function enterEditMode(detail) {
+        editMode = true;
+        editState = {
+          title: detail.proposal.title || "",
+          kind: detail.proposal.kind || "",
+          topics: (detail.proposal.topics || []).join(", "),
+          why_kept: detail.proposal.why_kept || "",
+          action: detail.proposal.action || "",
+          target_entry: detail.proposal.target_entry || "",
+          body: detail.body_markdown || "",
+        };
+        renderDetail(detail);
+      }
+
+      function exitEditMode() {
+        editMode = false;
+        editState = null;
+        renderDetail(currentDetail);
+      }
+
+      function bindEditForm(detail) {
+        const fields = {
+          title: document.getElementById("edit-title"),
+          kind: document.getElementById("edit-kind"),
+          topics: document.getElementById("edit-topics"),
+          why_kept: document.getElementById("edit-why-kept"),
+          action: document.getElementById("edit-action"),
+          target_entry: document.getElementById("edit-target-entry"),
+          body: document.getElementById("edit-body"),
+        };
+
+        Object.entries(fields).forEach(([key, element]) => {
+          if (!element) return;
+          element.addEventListener("input", () => updateEditState(key, element.value, detail));
+          element.addEventListener("change", () => updateEditState(key, element.value, detail));
+        });
+
+        document.getElementById("cancel-edit").onclick = exitEditMode;
+        document.getElementById("save-edit").onclick = () => saveEdit(detail.filename);
+      }
+
+      function updateEditState(key, value, detail) {
+        editState[key] = value;
+        if (key === "action") {
+          if (value !== "append-to") {
+            editState.target_entry = "";
+          }
+        }
+        renderDetail(detail);
+      }
+
+      function renderEditPreview() {
+        const preview = document.getElementById("edit-preview");
+        if (!preview) return;
+        preview.innerHTML = renderMarkdownPreview(editState.body);
+      }
+
+      function renderMarkdownPreview(text) {
+        const lines = String(text || "").split("\n");
+        return lines.map(line => {
+          const trimmed = line.trim();
+          if (!trimmed) return "<p></p>";
+          if (trimmed.startsWith("### ")) return `<h3>${escapeHtml(trimmed.slice(4))}</h3>`;
+          if (trimmed.startsWith("## ")) return `<h2>${escapeHtml(trimmed.slice(3))}</h2>`;
+          if (trimmed.startsWith("# ")) return `<h1>${escapeHtml(trimmed.slice(2))}</h1>`;
+          return `<p>${escapeHtml(trimmed)}</p>`;
+        }).join("");
+      }
+
+      function isDirty(detail, state) {
+        return state.title !== (detail.proposal.title || "")
+          || state.kind !== (detail.proposal.kind || "")
+          || state.topics !== (detail.proposal.topics || []).join(", ")
+          || state.why_kept !== (detail.proposal.why_kept || "")
+          || state.action !== (detail.proposal.action || "")
+          || state.target_entry !== (detail.proposal.target_entry || "")
+          || state.body !== (detail.body_markdown || "");
+      }
+
+      async function saveEdit(filename) {
+        const payload = {
+          title: editState.title,
+          kind: editState.kind,
+          topics: editState.topics,
+          why_kept: editState.why_kept,
+          action: editState.action,
+          target_entry: editState.action === "append-to" ? editState.target_entry : null,
+          body: editState.body,
+        };
+        const response = await fetch(`/inbox/${encodeURIComponent(filename)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const payloadResponse = await response.json();
+        if (!response.ok) {
+          alert(payloadResponse.detail || "Save failed.");
+          return;
+        }
+        editMode = false;
+        editState = null;
+        currentDetail = payloadResponse;
+        await refreshInbox();
+        renderDetail(payloadResponse);
+      }
+
+      async function promoteSelected(copy) {
+        if (!selectedFilename) return;
+        const response = await fetch(`/inbox/${encodeURIComponent(selectedFilename)}/promote`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ copy }),
+        });
+        if (!response.ok) {
+          const payload = await response.json();
+          alert(payload.detail || "Promotion failed.");
+          return;
+        }
+        await refreshInbox();
+      }
+
+      async function discardSelected() {
+        if (!selectedFilename) return;
+        if (!window.confirm(`Discard ${selectedFilename}?`)) return;
+        const response = await fetch(`/inbox/${encodeURIComponent(selectedFilename)}/discard`, { method: "POST" });
+        if (!response.ok) {
+          const payload = await response.json();
+          alert(payload.detail || "Discard failed.");
+          return;
+        }
+        await refreshInbox();
+      }
+
+      async function syncBook() {
+        const response = await fetch("/sync-book", { method: "POST" });
+        if (!response.ok) {
+          const payload = await response.json();
+          alert(payload.detail || "Sync failed.");
+          return;
+        }
+        const payload = await response.json();
+        updateLastSyncDisplay(payload.last_sync_time);
+      }
+
+      async function loadBookEntries() {
+        const response = await fetch("/book/entries");
+        const payload = await response.json();
+        bookEntries = payload.entries;
+      }
+
+      async function ingestFiles(fileList) {
+        const formData = new FormData();
+        [...fileList].forEach(file => formData.append("files", file));
+        uploadStatusEl.innerHTML = [...fileList].map(file => `<li data-name="${escapeHtml(file.name)}">${escapeHtml(file.name)} — uploading</li>`).join("");
+        const response = await fetch("/ingest", { method: "POST", body: formData });
+        const payload = await response.json();
+        const statuses = payload.results.map(result => {
+          if (result.error) return `${result.original_name} — failed: ${result.error}`;
+          return `${result.original_name} — done: ${result.inbox_filename}`;
+        });
+        uploadStatusEl.innerHTML = statuses.map(status => `<li>${escapeHtml(status)}</li>`).join("");
+        await refreshInbox();
+      }
+
+      dropzoneEl.addEventListener("dragover", event => {
+        event.preventDefault();
+        dropzoneEl.classList.add("dragover");
+      });
+      dropzoneEl.addEventListener("dragleave", () => dropzoneEl.classList.remove("dragover"));
+      dropzoneEl.addEventListener("drop", event => {
+        event.preventDefault();
+        dropzoneEl.classList.remove("dragover");
+        if (event.dataTransfer.files.length) ingestFiles(event.dataTransfer.files);
+      });
+      fileInputEl.addEventListener("change", () => {
+        if (fileInputEl.files.length) ingestFiles(fileInputEl.files);
+      });
+      document.getElementById("sync-book").addEventListener("click", syncBook);
+      updateLastSyncDisplay(lastSyncEl.title || (lastSyncEl.textContent === "never" ? "" : lastSyncEl.textContent));
+      loadBookEntries().then(() => {
+        renderInboxList();
+        renderDetail(initialDetail);
+      });
+    </script>
+  </body>
+  </html>

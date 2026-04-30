@@ -17,9 +17,13 @@ class FakeProposal:
     action: str
     target_entry: str | None
     draft_title: str | None
+    draft_kind: str
+    draft_topics: list[str]
+    draft_why_kept: str
     draft_content: str
     reasoning: str
     confidence: str
+    needs_escalation: bool
 
 
 def test_append_to_render_includes_target_entry_and_front_matter() -> None:
@@ -27,9 +31,13 @@ def test_append_to_render_includes_target_entry_and_front_matter() -> None:
         action="append-to",
         target_entry="Existing Entry",
         draft_title="Ignored Here",
+        draft_kind="idea-study",
+        draft_topics=["topic-a", "topic-b"],
+        draft_why_kept="Worth keeping.",
         draft_content="## Addition\n\nUseful material.",
         reasoning="This clearly extends an existing entry.",
         confidence="high",
+        needs_escalation=False,
     )
     source = SourceMetadata(
         filename="source-file.pdf",
@@ -43,6 +51,9 @@ def test_append_to_render_includes_target_entry_and_front_matter() -> None:
     assert "\n---\n\n" in rendered
     assert '  target_entry: "Existing Entry"' in rendered
     assert "  action: append-to" in rendered
+    assert '  title: "Ignored Here"' in rendered
+    assert "  kind: idea-study" in rendered
+    assert "  topics: [topic-a, topic-b]" in rendered
     assert "  confidence: high" in rendered
 
 
@@ -51,9 +62,13 @@ def test_render_omits_optional_message_when_not_provided() -> None:
         action="new-entry",
         target_entry=None,
         draft_title="Durable Idea",
+        draft_kind="idea-study",
+        draft_topics=["topic-a"],
+        draft_why_kept="Worth keeping.",
         draft_content="# Durable Idea\n",
         reasoning="It stands on its own.",
         confidence="medium",
+        needs_escalation=False,
     )
     source = SourceMetadata(
         filename="notes.md",
@@ -73,9 +88,13 @@ def test_rendered_body_contains_draft_content() -> None:
         action="flag-for-judgment",
         target_entry=None,
         draft_title=None,
+        draft_kind="field-study",
+        draft_topics=["topic-a", "topic-b", "topic-c"],
+        draft_why_kept="Worth keeping.",
         draft_content="Body stays exactly here.\n\nSecond paragraph.",
         reasoning="The case is ambiguous.",
         confidence="low",
+        needs_escalation=True,
     )
     source = SourceMetadata(
         filename="ambiguous.txt",
@@ -92,9 +111,13 @@ def test_suggested_filename_uses_date_and_slug() -> None:
         action="new-entry",
         target_entry=None,
         draft_title="Some Draft Title!",
+        draft_kind="project-study",
+        draft_topics=["topic-a"],
+        draft_why_kept="Worth keeping.",
         draft_content="content",
         reasoning="reasoning",
         confidence="high",
+        needs_escalation=False,
     )
 
     filename = suggest_inbox_filename(proposal, date(2026, 4, 29))

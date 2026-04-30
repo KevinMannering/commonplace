@@ -9,9 +9,16 @@ description = "A modern commonplace book ingestion CLI for drafting entries into
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "fastapi",
+    "jinja2",
+    "markdown",
     "openai",
     "pydantic",
     "pypdf",
+    "python-dotenv",
+    "python-multipart",
+    "PyYAML",
+    "uvicorn",
 ]
 
 [project.scripts]

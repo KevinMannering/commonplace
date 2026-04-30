@@ -18,6 +18,7 @@ class SourceMetadata:
     filename: str
     ingested_at: datetime
     message: str | None = None
+    source_path: str | None = None
     display_path: str | None = None
 
 
@@ -27,6 +28,11 @@ def render_inbox_markdown(proposal: Proposal, source: SourceMetadata) -> str:
         "---",
         "proposal:",
         f"  action: {_string_value(proposal.action)}",
+        f'  title: "{_escape_yaml_string(proposal.draft_title or "")}"',
+        f"  kind: {_string_value(proposal.draft_kind)}",
+        f"  topics: [{', '.join(proposal.draft_topics)}]",
+        "  why_kept: |",
+        *_indent_block(proposal.draft_why_kept, spaces=4),
     ]
 
     if proposal.target_entry:
@@ -37,13 +43,15 @@ def render_inbox_markdown(proposal: Proposal, source: SourceMetadata) -> str:
             "  reasoning: |",
             *_indent_block(proposal.reasoning, spaces=4),
             f"  confidence: {_string_value(proposal.confidence)}",
+            f"  needs_escalation: {str(proposal.needs_escalation).lower()}",
             "source:",
             f'  file: "{_escape_yaml_string(source.filename)}"',
         ]
     )
 
-    if source.display_path:
-        lines.append(f'  path: "{_escape_yaml_string(source.display_path)}"')
+    resolved_source_path = source.source_path or source.display_path
+    if resolved_source_path:
+        lines.append(f'  source_path: "{_escape_yaml_string(resolved_source_path)}"')
 
     lines.append(f"  ingested-at: {source.ingested_at.isoformat()}")
 
