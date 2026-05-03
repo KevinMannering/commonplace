@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Commonplace</title>
+    <title>Kevin's Commonplace Book</title>
     <style>
       {% include "_library.css" %}
     </style>
@@ -12,26 +12,65 @@
     <div class="app-shell">
       <header class="masthead">
         <div class="masthead-inner">
-          <div class="wordmark">
-            <svg class="wordmark-mark" viewBox="0 0 48 48" aria-hidden="true">
-              <path d="M12 36V12h24v24H12Z" fill="none" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M18 31V17h4.5l5.5 8.8V17H32v14h-4.3l-5.7-9V31H18Z" fill="currentColor"/>
-              <path d="M9 39h30" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <button id="wordmark-home" class="wordmark" type="button" aria-label="Return to homepage">
+            <svg class="wordmark-mark" viewBox="0 0 96 96" aria-hidden="true">
+              <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M27 18h38a5 5 0 0 1 5 5v46a5 5 0 0 1-5 5H27a5 5 0 0 1-5-5V23a5 5 0 0 1 5-5Z" stroke-width="2.6"/>
+                <path d="M31 18v56" stroke-width="2"/>
+                <path d="M38 25h24" stroke-width="1.8"/>
+                <path d="M38 67h24" stroke-width="1.8"/>
+                <path d="M50 26.5l1.8 2.5-1.8 2.5-1.8-2.5Z" stroke-width="1.5"/>
+                <path d="M50 64.5l1.8 2.5-1.8 2.5-1.8-2.5Z" stroke-width="1.5"/>
+                <path d="M42 59c3-10 8-18 15-25 3-2.8 6.1-4.8 8.5-5.4-.4 2.7-1.8 6.3-4.1 10.3-3.7 6.4-8.7 12.1-15.4 17.2" stroke-width="2.2"/>
+                <path d="M48 50c3-1.1 5.3-2.7 7.8-5.2" stroke-width="1.8"/>
+                <path d="M45.7 56.2c2.6-1 4.8-2.4 7-4.3" stroke-width="1.8"/>
+                <path d="M49.1 45.1c-.7 2.8-1.1 5.2-1.2 7.9" stroke-width="1.6"/>
+                <path d="M54.4 38.4c-1 2.4-1.8 4.7-2.3 7" stroke-width="1.6"/>
+                <path d="M19 38h-6" stroke-width="2"/>
+                <path d="M19 53h-6" stroke-width="2" stroke-dasharray="1 5"/>
+                <path d="M19 68h-6" stroke-width="2"/>
+                <circle cx="9" cy="38" r="2.7" stroke-width="2.2"/>
+                <circle cx="9" cy="53" r="2.7" stroke-width="2.2"/>
+                <circle cx="9" cy="68" r="2.7" stroke-width="2.2"/>
+                <path d="M70 32h4a2.6 2.6 0 0 1 2.6 2.6v8.8A2.6 2.6 0 0 1 74 46h-4" stroke-width="2"/>
+                <path d="M70 48h4a2.6 2.6 0 0 1 2.6 2.6v8.8A2.6 2.6 0 0 1 74 62h-4" stroke-width="2"/>
+                <path d="M70 64h4a2.6 2.6 0 0 1 2.6 2.6v8.8A2.6 2.6 0 0 1 74 78h-4" stroke-width="2"/>
+                <path d="M35 74v11l4-3.7 4 3.7V74" stroke-width="2.2"/>
+              </g>
             </svg>
             <div>
-              <h1 class="wordmark-text">Commonplace</h1>
+              <h1 class="wordmark-text">Kevin's Commonplace Book</h1>
             </div>
-          </div>
+          </button>
+          <nav class="masthead-nav" aria-label="Primary">
+            <button id="nav-reading-room" class="nav-link nav-link-active" type="button">Reading Room</button>
+            <button id="nav-inbox" class="nav-link" type="button">Inbox</button>
+          </nav>
           <div class="masthead-meta">
-            <span class="masthead-stat">Inbox <strong id="inbox-count">{{ inbox_count }}</strong></span>
-            <span class="masthead-stat">Last Sync <strong id="last-sync" title="{{ last_sync_time or '' }}">{{ last_sync_time or "never" }}</strong></span>
-            <button id="sync-book" class="primary">Sync Book</button>
+            <div class="sync-cluster">
+              <div class="sync-row">
+                <button
+                  id="sync-book"
+                  aria-label="Sync Book"
+                >
+                  Sync Book
+                </button>
+                <span
+                  id="sync-info"
+                  class="info-mark"
+                  tabindex="0"
+                  role="note"
+                  aria-label="Sync Book rebuilds the index and topics from the canonical metadata stored in book entries."
+                  data-tooltip="Rebuilds the index and topics from the canonical metadata stored in book entries."
+                >i</span>
+              </div>
+            </div>
           </div>
         </div>
         <div class="masthead-rule"></div>
       </header>
-      <main class="layout">
-        <section class="pane left-pane">
+      <main id="app-layout" class="layout reading-room-mode">
+        <section id="inbox-pane" class="pane left-pane" hidden>
           <p class="section-label">Inbox Catalogue</p>
           <div id="dropzone" class="dropzone fade-in">
             <p class="dropzone-title">Deposit Manuscripts Here — PDF or Markdown</p>
@@ -39,16 +78,33 @@
             <input id="file-input" type="file" multiple accept=".pdf,.md">
             <label class="file-prompt chrome" for="file-input">Choose Files</label>
           </div>
-          <ul id="upload-status" class="upload-status"></ul>
+          <ul id="upload-status" class="upload-status" aria-live="polite"></ul>
           <div class="catalog">
             <div id="inbox-list" class="inbox-list"></div>
           </div>
         </section>
         <section class="pane right-pane">
-          <div id="detail-root" class="detail-shell fade-in"></div>
+          <div id="detail-root" class="detail-shell fade-in" hidden></div>
+          <section id="chat-shell" class="chat-shell fade-in chat-shell-primary" aria-label="Commonplace chat">
+            <div id="chat-thread" class="chat-thread" aria-live="polite"></div>
+            <form id="chat-form" class="chat-composer">
+              <textarea id="chat-input" class="chat-input" rows="3" placeholder="Ask about an idea, topic, thinker, field, or project in the book..."></textarea>
+              <div class="chat-actions">
+                <div id="chat-status" class="chat-status muted"></div>
+                <button id="chat-send" type="submit" class="primary">Ask Book</button>
+              </div>
+            </form>
+          </section>
         </section>
       </main>
     </div>
+    <aside id="book-drawer" class="book-drawer" hidden aria-label="Book entry drawer">
+      <div id="book-drawer-scrim" class="book-drawer-scrim"></div>
+      <section class="book-drawer-panel" role="dialog" aria-modal="false" aria-labelledby="book-drawer-title">
+        <div id="book-drawer-content"></div>
+      </section>
+    </aside>
+    <div id="toast-rack" class="toast-rack" aria-live="polite" aria-atomic="true"></div>
 
     <script>
       const initialItems = {{ items|tojson }};
@@ -56,11 +112,24 @@
 
       const inboxListEl = document.getElementById("inbox-list");
       const detailRootEl = document.getElementById("detail-root");
-      const inboxCountEl = document.getElementById("inbox-count");
-      const lastSyncEl = document.getElementById("last-sync");
+      const syncInfoEl = document.getElementById("sync-info");
       const uploadStatusEl = document.getElementById("upload-status");
       const dropzoneEl = document.getElementById("dropzone");
       const fileInputEl = document.getElementById("file-input");
+      const toastRackEl = document.getElementById("toast-rack");
+      const chatThreadEl = document.getElementById("chat-thread");
+      const chatFormEl = document.getElementById("chat-form");
+      const chatInputEl = document.getElementById("chat-input");
+      const chatStatusEl = document.getElementById("chat-status");
+      const bookDrawerEl = document.getElementById("book-drawer");
+      const bookDrawerContentEl = document.getElementById("book-drawer-content");
+      const bookDrawerScrimEl = document.getElementById("book-drawer-scrim");
+      const appLayoutEl = document.getElementById("app-layout");
+      const inboxPaneEl = document.getElementById("inbox-pane");
+      const chatShellEl = document.getElementById("chat-shell");
+      const wordmarkHomeEl = document.getElementById("wordmark-home");
+      const readingRoomNavEl = document.getElementById("nav-reading-room");
+      const inboxNavEl = document.getElementById("nav-inbox");
       let bookEntries = [];
 
       let items = initialItems;
@@ -68,6 +137,11 @@
       let currentDetail = initialDetail;
       let editMode = false;
       let editState = null;
+      let uploadPhaseTimer = null;
+      let chatBusy = false;
+      let activeView = "reading-room";
+      let activeBookDetail = null;
+      let chatMessages = [];
 
       function escapeHtml(value) {
         return String(value ?? "")
@@ -105,12 +179,11 @@
 
       function updateLastSyncDisplay(value) {
         const formatted = formatSyncTimestamp(value);
-        lastSyncEl.textContent = formatted.text;
-        if (formatted.title) {
-          lastSyncEl.title = formatted.title;
-        } else {
-          lastSyncEl.removeAttribute("title");
-        }
+        const tooltip = formatted.text === "never"
+          ? "Rebuilds the index and topics from the canonical metadata stored in book entries. No sync has been recorded yet."
+          : `Rebuilds the index and topics from the canonical metadata stored in book entries. Last synced ${formatted.text}.`;
+        syncInfoEl.dataset.tooltip = tooltip;
+        syncInfoEl.setAttribute("aria-label", tooltip);
       }
 
       function labelValueHtml(label, value) {
@@ -120,6 +193,114 @@
             <div class="colophon-value">${escapeHtml(value || "—")}</div>
           </div>
         `;
+      }
+
+      function showToast(message, tone = "success") {
+        const toast = document.createElement("div");
+        toast.className = `toast toast-${tone}`;
+        toast.textContent = message;
+        toastRackEl.appendChild(toast);
+        window.setTimeout(() => {
+          toast.classList.add("toast-exit");
+          window.setTimeout(() => toast.remove(), 180);
+        }, 2400);
+      }
+
+      function renderChat() {
+        chatThreadEl.innerHTML = chatMessages.map(message => {
+          const matched = message.matchedEntries?.length
+            ? `
+              <div class="chat-matches">
+                ${message.matchedEntries.map(entry => `
+                  <button
+                    type="button"
+                    class="chat-chip"
+                    data-book-filename="${escapeHtml(entry.filename)}"
+                    title="Open ${escapeHtml(entry.title)}"
+                  >${escapeHtml(entry.title)}</button>
+                `).join("")}
+              </div>
+            `
+            : "";
+          const bodyHtml = message.contentHtml || renderMarkdownPreview(message.content);
+          return `
+            <article class="chat-message chat-${escapeHtml(message.role)}">
+              <div class="chat-message-role">${escapeHtml(message.role === "user" ? "Query" : "Commonplace")}</div>
+              <div class="chat-message-body ${message.role === "assistant" ? "markdown-body chat-markdown" : "chat-query"}">${bodyHtml}</div>
+              ${matched}
+            </article>
+          `;
+        }).join("");
+
+        if (chatBusy) {
+          chatThreadEl.innerHTML += `
+            <article class="chat-message chat-assistant chat-pending">
+              <div class="chat-message-role">Commonplace</div>
+              <div class="chat-typing" aria-hidden="true">
+                <span></span><span></span><span></span>
+              </div>
+            </article>
+          `;
+        }
+        chatThreadEl.querySelectorAll(".chat-chip[data-book-filename]").forEach(chip => {
+          chip.addEventListener("click", () => openBookDetail(chip.dataset.bookFilename));
+        });
+        chatThreadEl.scrollTop = chatThreadEl.scrollHeight;
+      }
+
+      function setChatBusy(active, statusText = "") {
+        chatBusy = active;
+        chatStatusEl.textContent = statusText;
+        chatInputEl.disabled = active;
+        document.getElementById("chat-send").disabled = active;
+        renderChat();
+      }
+
+      function setView(view) {
+        activeView = view;
+        const readingRoomActive = view === "reading-room";
+        appLayoutEl.classList.toggle("reading-room-mode", readingRoomActive);
+        inboxPaneEl.hidden = readingRoomActive;
+        inboxPaneEl.style.display = readingRoomActive ? "none" : "";
+        chatShellEl.classList.toggle("chat-shell-primary", readingRoomActive);
+        readingRoomNavEl.classList.toggle("nav-link-active", readingRoomActive);
+        inboxNavEl.classList.toggle("nav-link-active", !readingRoomActive);
+        if (readingRoomActive) {
+          chatShellEl.hidden = false;
+          chatShellEl.style.display = "";
+          detailRootEl.hidden = true;
+          detailRootEl.style.display = "none";
+        } else {
+          activeBookDetail = null;
+          closeBookDrawer();
+          chatShellEl.hidden = true;
+          chatShellEl.style.display = "none";
+          detailRootEl.hidden = false;
+          detailRootEl.style.display = "";
+        }
+      }
+
+      function renderUploadStatuses(statuses) {
+        if (!statuses.length) {
+          uploadStatusEl.innerHTML = "";
+          return;
+        }
+        uploadStatusEl.innerHTML = statuses.map(status => `
+          <li class="upload-item upload-${escapeHtml(status.state)}">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span class="upload-name">${escapeHtml(status.name)}</span>
+            <span class="upload-state">${escapeHtml(status.message)}</span>
+          </li>
+        `).join("");
+      }
+
+      function setIngestProcessing(active) {
+        dropzoneEl.classList.toggle("processing", active);
+        if (active) {
+          dropzoneEl.setAttribute("aria-busy", "true");
+        } else {
+          dropzoneEl.removeAttribute("aria-busy");
+        }
       }
 
       function renderInboxList() {
@@ -143,6 +324,7 @@
         inboxListEl.querySelectorAll(".proposal-card").forEach(card => {
           card.addEventListener("click", () => {
             selectedFilename = card.dataset.filename;
+            setView("inbox");
             renderInboxList();
             loadDetail(selectedFilename);
           });
@@ -151,6 +333,7 @@
 
       function renderDetail(detail) {
         currentDetail = detail;
+        detailRootEl.hidden = activeView === "reading-room";
         if (!detail) {
           detailRootEl.innerHTML = `
             <div class="detail-shell empty-page fade-in">
@@ -167,11 +350,14 @@
         }
 
         const proposal = detail.proposal;
+        const annotationMissing = !String(proposal.annotation || "").trim();
+        const canPromote = proposal.action !== "flag-for-judgment" && !annotationMissing;
         const colophonRows = [
           ["Title", proposal.title],
           ["Kind", proposal.kind],
           ["Topics", proposal.topics.length ? proposal.topics.join(", ") : "—"],
           ["Why Kept", proposal.why_kept],
+          ["Annotation", annotationMissing ? "Add your note before promoting." : proposal.annotation],
           ["Action", proposal.action],
           ["Confidence", proposal.confidence],
           ["Escalation", proposal.escalation_triggers.length ? proposal.escalation_triggers.join(", ") : "none"],
@@ -195,10 +381,20 @@
             ${colophonRows.map(([label, value]) => labelValueHtml(label, value)).join("")}
           </div>
           <div class="detail-actions">
-            <button id="promote-button" class="primary" ${proposal.action === "flag-for-judgment" ? "disabled" : ""}>Promote</button>
-            <button id="promote-copy-button" class="warning" ${proposal.action === "flag-for-judgment" ? "disabled" : ""}>Promote (copy)</button>
+            <button id="promote-button" class="primary" ${canPromote ? "" : "disabled"}>Promote</button>
+            <button id="promote-copy-button" class="warning" ${canPromote ? "" : "disabled"}>Promote (copy)</button>
             <button id="discard-button" class="danger">Discard</button>
           </div>
+          ${annotationMissing ? `
+            <div class="annotation-inline-editor">
+              <p class="annotation-note muted">Add a short annotation before this proposal can enter the book. This note records what you found interesting or why you kept it.</p>
+              <label class="colophon-label" for="quick-annotation">Annotation</label>
+              <textarea id="quick-annotation" class="quick-annotation-input" rows="4" placeholder="What did you find interesting here, or why does it belong in your book?"></textarea>
+              <div class="detail-actions annotation-inline-actions">
+                <button id="save-quick-annotation" class="primary">Save Annotation</button>
+              </div>
+            </div>
+          ` : ""}
           <div class="source-note">
             <div class="colophon-label">Source</div>
             <div>${escapeHtml(detail.source.file || "—")}</div>
@@ -211,11 +407,54 @@
         const promoteCopyButton = document.getElementById("promote-copy-button");
         const discardButton = document.getElementById("discard-button");
         const editToggle = document.getElementById("edit-toggle");
+        const quickAnnotationButton = document.getElementById("save-quick-annotation");
 
         if (promoteButton) promoteButton.onclick = () => promoteSelected(false);
         if (promoteCopyButton) promoteCopyButton.onclick = () => promoteSelected(true);
         if (discardButton) discardButton.onclick = () => discardSelected();
         if (editToggle) editToggle.onclick = () => enterEditMode(detail);
+        if (quickAnnotationButton) quickAnnotationButton.onclick = () => saveQuickAnnotation(detail.filename);
+      }
+
+      function renderBookDetail(detail) {
+        activeBookDetail = detail;
+        const entry = detail.entry;
+        const annotationsText = (entry.annotations || []).join("\n");
+        const colophonRows = [
+          ["Title", entry.title],
+          ["Kind", entry.kind],
+          ["Topics", entry.topics.length ? entry.topics.join(", ") : "—"],
+          ["Why Kept", entry.why_kept],
+          ["Related Entries", entry.related_entries.length ? entry.related_entries.join(", ") : "—"],
+        ];
+
+        bookDrawerContentEl.innerHTML = `
+          <div class="detail-header book-drawer-header">
+            <div>
+              <h2 id="book-drawer-title">${escapeHtml(entry.title)}</h2>
+              <p class="detail-subtitle">A canonical book entry surfaced from the Reading Room.</p>
+            </div>
+            <button id="close-book-drawer">Close</button>
+          </div>
+          <div class="colophon book-drawer-colophon">
+            ${colophonRows.map(([label, value]) => labelValueHtml(label, value)).join("")}
+          </div>
+          <div class="book-annotation-editor">
+            <label class="colophon-label" for="book-annotations">Annotations</label>
+            <textarea id="book-annotations" class="book-annotation-input" rows="5" placeholder="What about this entry belongs in your book?">${escapeHtml(annotationsText)}</textarea>
+            <div class="detail-actions book-drawer-actions">
+              <button id="save-book-annotations" class="primary">Save Annotations</button>
+            </div>
+          </div>
+          <div class="source-note book-revisit">
+            <div class="colophon-label">Revisit Entry</div>
+          </div>
+          <article class="markdown-body book-drawer-body">${detail.body_html}</article>
+        `;
+        bookDrawerEl.hidden = false;
+        bookDrawerEl.classList.add("book-drawer-open");
+        document.getElementById("close-book-drawer").onclick = closeBookDrawer;
+        document.getElementById("save-book-annotations").onclick = saveBookAnnotations;
       }
 
       function renderEditDetail(detail) {
@@ -230,6 +469,7 @@
           || !editState.action.trim()
           || (editState.action === "append-to" && !editState.target_entry)
           || !isDirty(detail, editState);
+        const promoteBlocked = !editState.annotation.trim();
 
         detailRootEl.innerHTML = `
           <div class="detail-header">
@@ -268,6 +508,10 @@
               <label for="edit-why-kept">Why kept</label>
               <textarea id="edit-why-kept">${escapeHtml(editState.why_kept)}</textarea>
             </div>
+            <div class="field field-wide">
+              <label for="edit-annotation">Your annotation</label>
+              <textarea id="edit-annotation" placeholder="What did you find interesting here, or why does it belong in your book?">${escapeHtml(editState.annotation)}</textarea>
+            </div>
             <div class="field">
               <label for="edit-body">Markdown body</label>
               <textarea id="edit-body" class="editor-body">${escapeHtml(editState.body)}</textarea>
@@ -279,21 +523,20 @@
           </div>
           <div class="detail-actions">
             <button id="save-edit" class="primary" ${saveDisabled ? "disabled" : ""}>Save</button>
-            <button id="promote-button" class="primary" disabled>Promote</button>
+            <button id="promote-button" class="primary" disabled>${promoteBlocked ? "Promote (annotation required)" : "Promote"}</button>
             <button id="promote-copy-button" class="warning" disabled>Promote (copy)</button>
             <button id="discard-button" class="danger" disabled>Discard</button>
           </div>
         `;
 
         bindEditForm(detail);
-        renderEditPreview();
+        updateEditFormUI(detail);
       }
 
       async function refreshInbox() {
         const response = await fetch("/inbox");
         const payload = await response.json();
         items = payload.items;
-        inboxCountEl.textContent = payload.inbox_count;
         updateLastSyncDisplay(payload.last_sync_time);
         if (!items.find(item => item.filename === selectedFilename)) {
           selectedFilename = items[0]?.filename || null;
@@ -316,6 +559,17 @@
         renderDetail(detail);
       }
 
+      async function showInboxView() {
+        closeBookDrawer();
+        setView("inbox");
+        renderInboxList();
+        if (selectedFilename) {
+          await loadDetail(selectedFilename);
+        } else {
+          renderDetail(null);
+        }
+      }
+
       function enterEditMode(detail) {
         editMode = true;
         editState = {
@@ -323,6 +577,7 @@
           kind: detail.proposal.kind || "",
           topics: (detail.proposal.topics || []).join(", "),
           why_kept: detail.proposal.why_kept || "",
+          annotation: detail.proposal.annotation || "",
           action: detail.proposal.action || "",
           target_entry: detail.proposal.target_entry || "",
           body: detail.body_markdown || "",
@@ -342,6 +597,7 @@
           kind: document.getElementById("edit-kind"),
           topics: document.getElementById("edit-topics"),
           why_kept: document.getElementById("edit-why-kept"),
+          annotation: document.getElementById("edit-annotation"),
           action: document.getElementById("edit-action"),
           target_entry: document.getElementById("edit-target-entry"),
           body: document.getElementById("edit-body"),
@@ -349,8 +605,8 @@
 
         Object.entries(fields).forEach(([key, element]) => {
           if (!element) return;
-          element.addEventListener("input", () => updateEditState(key, element.value, detail));
-          element.addEventListener("change", () => updateEditState(key, element.value, detail));
+          const eventName = element.tagName === "SELECT" ? "change" : "input";
+          element.addEventListener(eventName, () => updateEditState(key, element.value, detail));
         });
 
         document.getElementById("cancel-edit").onclick = exitEditMode;
@@ -362,27 +618,171 @@
         if (key === "action") {
           if (value !== "append-to") {
             editState.target_entry = "";
+            const targetEntryField = document.getElementById("target-entry-field");
+            const targetEntrySelect = document.getElementById("edit-target-entry");
+            if (targetEntryField) targetEntryField.style.display = "none";
+            if (targetEntrySelect) targetEntrySelect.value = "";
+          } else {
+            const targetEntryField = document.getElementById("target-entry-field");
+            if (targetEntryField) targetEntryField.style.display = "";
           }
         }
-        renderDetail(detail);
+        updateEditFormUI(detail);
       }
 
-      function renderEditPreview() {
+      function updateEditFormUI(detail) {
+        const saveButton = document.getElementById("save-edit");
+        const promoteButton = document.getElementById("promote-button");
         const preview = document.getElementById("edit-preview");
+        const targetEntryField = document.getElementById("target-entry-field");
+        const saveDisabled = !editState.title.trim()
+          || !editState.kind.trim()
+          || !editState.why_kept.trim()
+          || !editState.body.trim()
+          || !editState.action.trim()
+          || (editState.action === "append-to" && !editState.target_entry)
+          || !isDirty(detail, editState);
+        const promoteBlocked = !editState.annotation.trim();
+
+        if (targetEntryField) {
+          targetEntryField.style.display = editState.action === "append-to" ? "" : "none";
+        }
+        if (saveButton) {
+          saveButton.disabled = saveDisabled;
+        }
+        if (promoteButton) {
+          promoteButton.disabled = true;
+          promoteButton.textContent = promoteBlocked ? "Promote (annotation required)" : "Promote";
+        }
         if (!preview) return;
         preview.innerHTML = renderMarkdownPreview(editState.body);
       }
 
       function renderMarkdownPreview(text) {
         const lines = String(text || "").split("\n");
-        return lines.map(line => {
+        let html = "";
+        let inList = false;
+
+        function inlineMarkdown(value) {
+          let rendered = escapeHtml(value);
+          rendered = rendered.replace(/`([^`]+)`/g, "<code>$1</code>");
+          rendered = rendered.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+          rendered = rendered.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+          rendered = rendered.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+          return rendered;
+        }
+
+        for (const line of lines) {
           const trimmed = line.trim();
-          if (!trimmed) return "<p></p>";
-          if (trimmed.startsWith("### ")) return `<h3>${escapeHtml(trimmed.slice(4))}</h3>`;
-          if (trimmed.startsWith("## ")) return `<h2>${escapeHtml(trimmed.slice(3))}</h2>`;
-          if (trimmed.startsWith("# ")) return `<h1>${escapeHtml(trimmed.slice(2))}</h1>`;
-          return `<p>${escapeHtml(trimmed)}</p>`;
-        }).join("");
+          if (!trimmed) {
+            if (inList) {
+              html += "</ul>";
+              inList = false;
+            }
+            continue;
+          }
+          if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+            if (!inList) {
+              html += "<ul>";
+              inList = true;
+            }
+            html += `<li>${inlineMarkdown(trimmed.slice(2))}</li>`;
+            continue;
+          }
+          if (inList) {
+            html += "</ul>";
+            inList = false;
+          }
+          if (trimmed.startsWith("### ")) {
+            html += `<h3>${inlineMarkdown(trimmed.slice(4))}</h3>`;
+          } else if (trimmed.startsWith("## ")) {
+            html += `<h2>${inlineMarkdown(trimmed.slice(3))}</h2>`;
+          } else if (trimmed.startsWith("# ")) {
+            html += `<h1>${inlineMarkdown(trimmed.slice(2))}</h1>`;
+          } else {
+            html += `<p>${inlineMarkdown(trimmed)}</p>`;
+          }
+        }
+        if (inList) {
+          html += "</ul>";
+        }
+        return html;
+      }
+
+      async function submitChatQuery(event) {
+        event.preventDefault();
+        const query = chatInputEl.value.trim();
+        if (!query || chatBusy) return;
+
+        chatMessages.push({ role: "user", content: query, matchedEntries: [] });
+        chatInputEl.value = "";
+        setChatBusy(true, "Searching metadata, then reading matched entries...");
+
+        const response = await fetch("/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          setChatBusy(false, "");
+          showToast(payload.detail || "Chat failed.", "error");
+          chatMessages.push({
+            role: "assistant",
+            content: payload.detail || "Chat failed.",
+            contentHtml: renderMarkdownPreview(payload.detail || "Chat failed."),
+            matchedEntries: [],
+          });
+          renderChat();
+          return;
+        }
+
+        chatMessages.push({
+          role: "assistant",
+          content: payload.answer,
+          contentHtml: payload.answer_html || renderMarkdownPreview(payload.answer),
+          matchedEntries: payload.matched_entries || [],
+        });
+        setChatBusy(false, "");
+      }
+
+      async function openBookDetail(filename) {
+        if (!filename) return;
+        const response = await fetch(`/book/${encodeURIComponent(filename)}`);
+        if (!response.ok) {
+          const payload = await response.json();
+          showToast(payload.detail || "Could not open book entry.", "error");
+          return;
+        }
+        const detail = await response.json();
+        activeBookDetail = detail;
+        setView("reading-room");
+        renderBookDetail(detail);
+      }
+
+      function closeBookDrawer() {
+        activeBookDetail = null;
+        bookDrawerEl.classList.remove("book-drawer-open");
+        bookDrawerEl.hidden = true;
+        bookDrawerContentEl.innerHTML = "";
+      }
+
+      async function saveBookAnnotations() {
+        if (!activeBookDetail) return;
+        const textarea = document.getElementById("book-annotations");
+        const response = await fetch(`/book/${encodeURIComponent(activeBookDetail.filename)}/annotations`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ annotations: textarea.value }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          showToast(payload.detail || "Could not save annotations.", "error");
+          return;
+        }
+        activeBookDetail = payload;
+        renderBookDetail(payload);
+        showToast("Annotations updated.");
       }
 
       function isDirty(detail, state) {
@@ -390,6 +790,7 @@
           || state.kind !== (detail.proposal.kind || "")
           || state.topics !== (detail.proposal.topics || []).join(", ")
           || state.why_kept !== (detail.proposal.why_kept || "")
+          || state.annotation !== (detail.proposal.annotation || "")
           || state.action !== (detail.proposal.action || "")
           || state.target_entry !== (detail.proposal.target_entry || "")
           || state.body !== (detail.body_markdown || "");
@@ -401,6 +802,7 @@
           kind: editState.kind,
           topics: editState.topics,
           why_kept: editState.why_kept,
+          annotation: editState.annotation,
           action: editState.action,
           target_entry: editState.action === "append-to" ? editState.target_entry : null,
           body: editState.body,
@@ -412,7 +814,7 @@
         });
         const payloadResponse = await response.json();
         if (!response.ok) {
-          alert(payloadResponse.detail || "Save failed.");
+          showToast(payloadResponse.detail || "Save failed.", "error");
           return;
         }
         editMode = false;
@@ -420,6 +822,26 @@
         currentDetail = payloadResponse;
         await refreshInbox();
         renderDetail(payloadResponse);
+        showToast("Proposal updated.");
+      }
+
+      async function saveQuickAnnotation(filename) {
+        const quickAnnotationEl = document.getElementById("quick-annotation");
+        if (!quickAnnotationEl) return;
+        const response = await fetch(`/inbox/${encodeURIComponent(filename)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ annotation: quickAnnotationEl.value }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          showToast(payload.detail || "Could not save annotation.", "error");
+          return;
+        }
+        currentDetail = payload;
+        await refreshInbox();
+        renderDetail(payload);
+        showToast("Annotation saved.");
       }
 
       async function promoteSelected(copy) {
@@ -435,6 +857,7 @@
           return;
         }
         await refreshInbox();
+        showToast(copy ? "Proposal copied into the book." : "Proposal promoted into the book.");
       }
 
       async function discardSelected() {
@@ -458,6 +881,7 @@
         }
         const payload = await response.json();
         updateLastSyncDisplay(payload.last_sync_time);
+        showToast("Book index and topics refreshed.");
       }
 
       async function loadBookEntries() {
@@ -467,17 +891,51 @@
       }
 
       async function ingestFiles(fileList) {
+        const files = [...fileList];
         const formData = new FormData();
-        [...fileList].forEach(file => formData.append("files", file));
-        uploadStatusEl.innerHTML = [...fileList].map(file => `<li data-name="${escapeHtml(file.name)}">${escapeHtml(file.name)} — uploading</li>`).join("");
+        files.forEach(file => formData.append("files", file));
+        const statuses = files.map(file => ({
+          name: file.name,
+          state: "uploading",
+          message: "uploading",
+        }));
+        renderUploadStatuses(statuses);
+        setIngestProcessing(true);
+        window.clearTimeout(uploadPhaseTimer);
+        uploadPhaseTimer = window.setTimeout(() => {
+          statuses.forEach(status => {
+            if (status.state === "uploading") {
+              status.state = "ingesting";
+              status.message = "ingesting";
+            }
+          });
+          renderUploadStatuses(statuses);
+        }, 300);
         const response = await fetch("/ingest", { method: "POST", body: formData });
         const payload = await response.json();
-        const statuses = payload.results.map(result => {
-          if (result.error) return `${result.original_name} — failed: ${result.error}`;
-          return `${result.original_name} — done: ${result.inbox_filename}`;
+        window.clearTimeout(uploadPhaseTimer);
+        payload.results.forEach((result, index) => {
+          if (result.error) {
+            statuses[index] = {
+              name: result.original_name,
+              state: "failed",
+              message: result.error,
+            };
+            return;
+          }
+          statuses[index] = {
+            name: result.original_name,
+            state: "done",
+            message: `done: ${result.inbox_filename}`,
+          };
         });
-        uploadStatusEl.innerHTML = statuses.map(status => `<li>${escapeHtml(status)}</li>`).join("");
+        renderUploadStatuses(statuses);
+        setIngestProcessing(false);
         await refreshInbox();
+        const successCount = payload.results.filter(result => !result.error).length;
+        if (successCount > 0) {
+          showToast(successCount === 1 ? "Proposal added to the inbox." : `${successCount} proposals added to the inbox.`);
+        }
       }
 
       dropzoneEl.addEventListener("dragover", event => {
@@ -494,10 +952,25 @@
         if (fileInputEl.files.length) ingestFiles(fileInputEl.files);
       });
       document.getElementById("sync-book").addEventListener("click", syncBook);
-      updateLastSyncDisplay(lastSyncEl.title || (lastSyncEl.textContent === "never" ? "" : lastSyncEl.textContent));
+      bookDrawerScrimEl.addEventListener("click", closeBookDrawer);
+      chatFormEl.addEventListener("submit", submitChatQuery);
+      wordmarkHomeEl.addEventListener("click", () => {
+        closeBookDrawer();
+        setView("reading-room");
+        renderChat();
+      });
+      readingRoomNavEl.addEventListener("click", () => {
+        activeBookDetail = null;
+        setView("reading-room");
+        renderChat();
+      });
+      inboxNavEl.addEventListener("click", showInboxView);
+      updateLastSyncDisplay({{ last_sync_time|tojson }});
       loadBookEntries().then(() => {
+        setView("reading-room");
         renderInboxList();
         renderDetail(initialDetail);
+        renderChat();
       });
     </script>
   </body>

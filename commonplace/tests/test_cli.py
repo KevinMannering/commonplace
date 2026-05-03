@@ -195,9 +195,15 @@ def test_promote_latest_moves_file_when_confirmed(
         "---\n"
         "proposal:\n"
         "  action: new-entry\n"
+        '  title: "Canonical Entry"\n'
+        "  kind: idea-study\n"
+        "  topics: [testing, promotion]\n"
+        "  why_kept: Worth keeping for sync.\n"
+        '  annotation: "I want to remember this framing."\n'
         "source:\n"
         '  file: "source.pdf"\n'
         "---\n\n"
+        "# Canonical Entry\n\n"
         "proposal\n",
         encoding="utf-8",
     )
@@ -212,6 +218,14 @@ def test_promote_latest_moves_file_when_confirmed(
     assert promoted == destination
     assert destination.exists()
     assert not proposal.exists()
+    rendered = destination.read_text(encoding="utf-8")
+    assert "title: \"Canonical Entry\"" in rendered
+    assert "kind: idea-study" in rendered
+    assert "why-kept: Worth keeping for sync." in rendered
+    assert "topics: [testing, promotion]" in rendered
+    assert 'annotations:\n  - "I want to remember this framing."' in rendered
+    assert "proposal:\n" not in rendered
+    assert rendered.endswith("proposal\n")
     assert capsys.readouterr().out.strip() == str(destination)
 
 
@@ -227,9 +241,15 @@ def test_promote_copy_preserves_inbox_file_when_yes_is_passed(
         "---\n"
         "proposal:\n"
         "  action: new-entry\n"
+        '  title: "Canonical Entry"\n'
+        "  kind: thinker\n"
+        "  topics: [copying]\n"
+        "  why_kept: Worth preserving in canonical form.\n"
+        '  annotation: "Important to preserve why this mattered."\n'
         "source:\n"
         '  file: "source.pdf"\n'
         "---\n\n"
+        "# Canonical Entry\n\n"
         "proposal\n",
         encoding="utf-8",
     )
@@ -248,8 +268,52 @@ def test_promote_copy_preserves_inbox_file_when_yes_is_passed(
     assert promoted == destination
     assert destination.exists()
     assert proposal.exists()
-    assert destination.read_text(encoding="utf-8").endswith("proposal\n")
+    destination_text = destination.read_text(encoding="utf-8")
+    assert destination_text.endswith("proposal\n")
+    assert "title: \"Canonical Entry\"" in destination_text
+    assert "kind: thinker" in destination_text
+    assert 'annotations:\n  - "Important to preserve why this mattered."' in destination_text
+    assert "proposal:\n" not in destination_text
     assert capsys.readouterr().out.strip() == str(destination)
+
+
+def test_promote_new_entry_output_can_be_read_by_sync_book(
+    tmp_path: Path, monkeypatch
+) -> None:
+    inbox_dir = tmp_path / "inbox"
+    book_dir = tmp_path / "book"
+    inbox_dir.mkdir()
+    book_dir.mkdir()
+    proposal = inbox_dir / "2026-04-30-proposal.md"
+    proposal.write_text(
+        "---\n"
+        "proposal:\n"
+        "  action: new-entry\n"
+        '  title: "Canonical Entry"\n'
+        "  kind: field-study\n"
+        "  topics: [shared-topic, canonical]\n"
+        "  why_kept: This should become a canonical book entry.\n"
+        '  annotation: "My note on why this belongs in the book."\n'
+        "source:\n"
+        '  file: "source.pdf"\n'
+        "---\n\n"
+        "# Canonical Entry\n\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(cli, "INBOX_DIR", inbox_dir)
+    monkeypatch.setattr(cli, "BOOK_DIR", book_dir)
+
+    cli.run_promote(path=str(proposal), latest=False, copy_file=False, assume_yes=True)
+    entries = cli.load_book_entries(book_dir)
+
+    assert len(entries) == 1
+    assert entries[0].title == "Canonical Entry"
+    assert entries[0].kind == "field-study"
+    assert entries[0].why_kept == "This should become a canonical book entry."
+    assert entries[0].topics == ["shared-topic", "canonical"]
+    assert entries[0].annotations == ["My note on why this belongs in the book."]
 
 
 def test_promote_append_to_appends_body_into_target_entry(
@@ -265,6 +329,7 @@ def test_promote_append_to_appends_body_into_target_entry(
         "proposal:\n"
         '  action: append-to\n'
         '  target_entry: "Existing Entry"\n'
+        '  annotation: "This extends the field note usefully."\n'
         "source:\n"
         '  file: "source.pdf"\n'
         "---\n\n"
@@ -292,8 +357,39 @@ def test_promote_append_to_appends_body_into_target_entry(
     assert "## Appended Material" in updated_text
     assert "Useful addition." in updated_text
     assert "---\n\n## Appended Material" in updated_text
+    assert 'annotations:\n- This extends the field note usefully.' in updated_text or 'annotations:\n  - This extends the field note usefully.' in updated_text
     assert not proposal.exists()
     assert capsys.readouterr().out.strip() == str(target)
+
+
+def test_promote_requires_annotation_before_admission(
+    tmp_path: Path, monkeypatch
+) -> None:
+    inbox_dir = tmp_path / "inbox"
+    book_dir = tmp_path / "book"
+    inbox_dir.mkdir()
+    book_dir.mkdir()
+    proposal = inbox_dir / "2026-04-30-proposal.md"
+    proposal.write_text(
+        "---\n"
+        "proposal:\n"
+        "  action: new-entry\n"
+        '  title: "Canonical Entry"\n'
+        "  kind: idea-study\n"
+        "  topics: [testing]\n"
+        "  why_kept: Worth preserving.\n"
+        "source:\n"
+        '  file: "source.pdf"\n'
+        "---\n\n"
+        "# Canonical Entry\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(cli, "INBOX_DIR", inbox_dir)
+    monkeypatch.setattr(cli, "BOOK_DIR", book_dir)
+
+    with pytest.raises(RuntimeError, match="Cannot promote without an annotation"):
+        cli.run_promote(path=str(proposal), latest=False, copy_file=False, assume_yes=True)
 
 
 def test_promote_flag_for_judgment_refuses_automatic_admission(

@@ -1,35 +1,12 @@
 ---
-proposal:
-  action: new-entry
-  title: Maturing Inference Market and Investment Dynamics
-  kind: idea-study
-  topics:
-  - inference-market
-  - ai-investment
-  - post-gpu-scarcity
-  - economic-paradigms
-  why_kept: 'This entry examines the emerging dynamics in the AI inference market,
-    highlighting investment opportunities and strategic shifts as the market matures
-    beyond GPU scarcity. It captures the transition to specialized service offerings
-    and the enduring relevance of infrastructure providers, offering a strategic guide
-    for future investment thinking.
-
-    '
-  reasoning: 'The proposed entry tackles a new and coherent theme regarding the maturation
-    of the inference market in AI and aligns well with existing ideas on economic
-    models and technology post-scarcity. No existing entry directly covers this market-centric
-    perspective of AI evolution, warranting a fresh entry.
-
-    '
-  confidence: high
-  needs_escalation: false
-source:
-  file: How the Inference Market Will Mature_ An Investor’s Playbook for the “Post-GPU
-    Scarcity” Era.pdf
-  source_path: /Users/kevinmannering/Documents/Everything Else/programming/commonplace/sources/incoming/2026-04-30/How
-    the Inference Market Will Mature_ An Investor’s Playbook for the “Post-GPU Scarcity”
-    Era.pdf
-  ingested-at: 2026-04-30 16:57:43.512711-04:00
+title: "Maturing Inference Market and Investment Dynamics"
+kind: idea-study
+why-kept: This entry examines the emerging dynamics in the AI inference market,
+  highlighting investment opportunities and strategic shifts as the market matures
+  beyond GPU scarcity. It captures the transition to specialized service offerings
+  and the enduring relevance of infrastructure providers, offering a strategic guide
+  for future investment thinking.
+topics: [inference-market, ai-investment, post-gpu-scarcity, economic-paradigms]
 ---
 
 ### The Evolution of the Inference Market

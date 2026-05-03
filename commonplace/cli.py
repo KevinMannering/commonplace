@@ -10,6 +10,7 @@ import subprocess
 import webbrowser
 from datetime import datetime
 from pathlib import Path
+import yaml
 
 from .config import COMMONPLACE_CONFIG
 from .extract import extract_text
@@ -36,8 +37,13 @@ class ReviewedProposal:
 
     source_path: Path
     action: str
-    target_entry: str | None
-    body: str
+    target_entry: str | None = None
+    title: str | None = None
+    kind: str | None = None
+    why_kept: str | None = None
+    topics: list[str] | None = None
+    annotation: str | None = None
+    body: str = ""
 
 
 @dataclass(frozen=True)
@@ -49,6 +55,7 @@ class BookEntryMetadata:
     kind: str
     why_kept: str
     topics: list[str]
+    annotations: list[str]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -238,6 +245,12 @@ def run_promote(
             "Cannot promote a proposal marked flag-for-judgment. Review and edit it first."
         )
 
+    if not reviewed.annotation:
+        raise RuntimeError(
+            "Cannot promote without an annotation. Add what you found interesting "
+            "or why you kept it first."
+        )
+
     if reviewed.action == "new-entry" and destination_path.exists():
         raise FileExistsError(f"Book file already exists: {destination_path}")
 
@@ -248,14 +261,13 @@ def run_promote(
             raise RuntimeError("Promotion cancelled.")
 
     if reviewed.action == "append-to":
-        _append_reviewed_body(destination_path, reviewed.body)
+        _append_reviewed_body(destination_path, reviewed)
         if not copy_file:
             source_path.unlink()
     else:
-        if copy_file:
-            shutil.copy2(source_path, destination_path)
-        else:
-            shutil.move(str(source_path), str(destination_path))
+        _write_new_entry_promotion(destination_path, reviewed)
+        if not copy_file:
+            source_path.unlink()
 
     print(destination_path)
     return destination_path
@@ -390,15 +402,34 @@ def _read_reviewed_proposal(path: Path) -> ReviewedProposal:
     front_matter = text[4:closing_marker]
     body = text[closing_marker + len("\n---\n") :].lstrip("\n").rstrip()
 
-    action = _extract_frontmatter_value(front_matter, "action")
+    parsed = yaml.safe_load(front_matter) or {}
+    proposal_data = parsed.get("proposal", {})
+    if not isinstance(proposal_data, dict):
+        proposal_data = {}
+
+    action = str(proposal_data.get("action") or _extract_frontmatter_value(front_matter, "action") or "")
     if not action:
         raise ValueError(f"Reviewed inbox file is missing proposal.action: {path}")
 
-    target_entry = _extract_frontmatter_value(front_matter, "target_entry")
+    target_entry = proposal_data.get("target_entry")
+    if target_entry is None:
+        target_entry = _extract_frontmatter_value(front_matter, "target_entry")
+
+    title = proposal_data.get("title")
+    kind = proposal_data.get("kind")
+    why_kept = proposal_data.get("why_kept")
+    annotation = proposal_data.get("annotation")
+    topics_value = proposal_data.get("topics", [])
+    topics = [str(topic).strip() for topic in topics_value if str(topic).strip()] if isinstance(topics_value, list) else []
     return ReviewedProposal(
         source_path=path,
         action=action,
-        target_entry=target_entry,
+        target_entry=str(target_entry).strip() if target_entry else None,
+        title=str(title).strip() if title else None,
+        kind=str(kind).strip() if kind else None,
+        why_kept=str(why_kept).strip() if why_kept else None,
+        topics=topics,
+        annotation=str(annotation).strip() if annotation else None,
         body=body,
     )
 
@@ -433,11 +464,70 @@ def _resolve_book_destination(reviewed: ReviewedProposal) -> Path:
     return BOOK_DIR / reviewed.source_path.name
 
 
-def _append_reviewed_body(destination_path: Path, body: str) -> None:
-    """Append reviewed proposal body content into an existing book entry."""
-    existing_text = destination_path.read_text(encoding="utf-8").rstrip()
-    appended_text = f"{existing_text}\n\n---\n\n{body.rstrip()}\n"
-    destination_path.write_text(appended_text, encoding="utf-8")
+def _append_reviewed_body(destination_path: Path, reviewed: ReviewedProposal) -> None:
+    """Append reviewed proposal body and annotation into an existing book entry."""
+    text = destination_path.read_text(encoding="utf-8")
+    front_matter, existing_body = _split_book_front_matter(text, destination_path)
+    metadata = yaml.safe_load(front_matter) or {}
+    annotations = _normalize_string_list(metadata.get("annotations", []))
+    if reviewed.annotation:
+        annotations.append(reviewed.annotation)
+    metadata["annotations"] = annotations
+
+    appended_body = f"{existing_body.rstrip()}\n\n---\n\n{reviewed.body.rstrip()}\n"
+    rewritten = (
+        f"---\n"
+        f"{yaml.safe_dump(metadata, sort_keys=False, allow_unicode=True).rstrip()}\n"
+        f"---\n\n"
+        f"{appended_body}"
+    )
+    destination_path.write_text(rewritten, encoding="utf-8")
+
+
+def _write_new_entry_promotion(destination_path: Path, reviewed: ReviewedProposal) -> None:
+    """Write a reviewed new-entry proposal as a canonical book entry."""
+    if not reviewed.title or not reviewed.kind or not reviewed.why_kept:
+        raise ValueError(
+            f"Reviewed new-entry proposal is missing canonical metadata: {reviewed.source_path}"
+        )
+
+    destination_path.write_text(
+        _render_canonical_book_entry(reviewed),
+        encoding="utf-8",
+    )
+
+
+def _render_canonical_book_entry(reviewed: ReviewedProposal) -> str:
+    """Render canonical top-level front-matter for a book entry."""
+    lines = [
+        "---",
+        f"title: {_quote_frontmatter_string(reviewed.title or '')}",
+        f"kind: {reviewed.kind or ''}",
+        *_render_wrapped_frontmatter("why-kept", reviewed.why_kept or ""),
+        f"topics: [{', '.join(reviewed.topics or [])}]",
+        "annotations:",
+        f"  - {_quote_frontmatter_string(reviewed.annotation or '')}",
+        "---",
+        "",
+        reviewed.body.rstrip(),
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _render_wrapped_frontmatter(key: str, value: str, width: int = 72) -> list[str]:
+    """Render a folded plain-scalar frontmatter field with indented continuations."""
+    wrapped = textwrap.wrap(value.strip(), width=width) or [""]
+    first, *rest = wrapped
+    lines = [f"{key}: {first}".rstrip()]
+    lines.extend(f"  {line}" for line in rest)
+    return lines
+
+
+def _quote_frontmatter_string(value: str) -> str:
+    """Quote a frontmatter string while preserving Unicode."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 def _describe_promotion_action(action: str, copy_file: bool) -> str:
@@ -561,19 +651,13 @@ def render_book_topics(entries: list[BookEntryMetadata]) -> str:
 def _parse_book_entry_metadata(path: Path) -> BookEntryMetadata:
     """Parse the required metadata fields from a canonical book entry."""
     text = path.read_text(encoding="utf-8")
-    if not text.startswith("---\n"):
-        raise ValueError(f"Book entry is missing front-matter: {path}")
-
-    closing_marker = text.find("\n---\n", 4)
-    if closing_marker == -1:
-        raise ValueError(f"Book entry has malformed front-matter: {path}")
-
-    front_matter = text[4:closing_marker]
-    metadata = _parse_simple_frontmatter(front_matter)
-    title = metadata.get("title")
-    kind = metadata.get("kind")
-    why_kept = metadata.get("why-kept")
-    topics = _parse_topics_value(metadata.get("topics"))
+    front_matter, _ = _split_book_front_matter(text, path)
+    metadata = yaml.safe_load(front_matter) or {}
+    title = str(metadata.get("title", "")).strip()
+    kind = str(metadata.get("kind", "")).strip()
+    why_kept = str(metadata.get("why-kept", "")).strip()
+    topics = _normalize_string_list(metadata.get("topics", []))
+    annotations = _normalize_string_list(metadata.get("annotations", []))
 
     if not title or not kind or not why_kept:
         raise ValueError(f"Book entry is missing required metadata: {path}")
@@ -584,43 +668,30 @@ def _parse_book_entry_metadata(path: Path) -> BookEntryMetadata:
         kind=kind,
         why_kept=why_kept,
         topics=topics,
+        annotations=annotations,
     )
 
 
-def _parse_simple_frontmatter(front_matter: str) -> dict[str, str]:
-    """Parse simple front-matter scalars and folded continuations."""
-    data: dict[str, str] = {}
-    current_key: str | None = None
-
-    for raw_line in front_matter.splitlines():
-        if raw_line.startswith((" ", "\t")) and current_key:
-            continuation = raw_line.strip()
-            if continuation:
-                data[current_key] = f"{data[current_key]} {continuation}".strip()
-            continue
-
-        if ":" not in raw_line:
-            current_key = None
-            continue
-
-        key, value = raw_line.split(":", 1)
-        current_key = key.strip()
-        data[current_key] = value.strip()
-
-    return data
+def _split_book_front_matter(text: str, path: Path) -> tuple[str, str]:
+    """Split canonical book front-matter from markdown body."""
+    if not text.startswith("---\n"):
+        raise ValueError(f"Book entry is missing front-matter: {path}")
+    closing_marker = text.find("\n---\n", 4)
+    if closing_marker == -1:
+        raise ValueError(f"Book entry has malformed front-matter: {path}")
+    front_matter = text[4:closing_marker]
+    body = text[closing_marker + len("\n---\n") :].lstrip("\n")
+    return front_matter, body
 
 
-def _parse_topics_value(value: str | None) -> list[str]:
-    """Parse the compact topics front-matter list."""
-    if not value:
-        return []
-    stripped = value.strip()
-    if stripped.startswith("[") and stripped.endswith("]"):
-        inner = stripped[1:-1].strip()
-        if not inner:
-            return []
-        return [item.strip() for item in inner.split(",") if item.strip()]
-    return [stripped]
+def _normalize_string_list(value: object) -> list[str]:
+    """Normalize a YAML scalar or list into a clean string list."""
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        stripped = value.strip()
+        return [stripped] if stripped else []
+    return []
 
 
 def _wrap_bullet_continuation(text: str, width: int = 72) -> list[str]:

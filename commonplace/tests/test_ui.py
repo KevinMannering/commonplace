@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+import re
+import shutil
+import subprocess
 
 from fastapi.testclient import TestClient
 
@@ -29,8 +32,21 @@ def create_test_app(tmp_path: Path, monkeypatch) -> TestClient:
         "kind: field-study\n"
         "why-kept: Canonical field entry.\n"
         "topics: [openclaw, agent-architecture]\n"
+        "related-entries:\n"
+        "  - Agent Economics Notes\n"
         "---\n\n"
         "# OpenClaw\n",
+        encoding="utf-8",
+    )
+    (book_dir / "Agent Economics Notes.md").write_text(
+        "---\n"
+        "title: Agent Economics Notes\n"
+        "kind: idea-study\n"
+        "why-kept: Tracks economic patterns in agent infrastructure.\n"
+        "topics: [agent-economics, ai-investment]\n"
+        "---\n\n"
+        "# Agent Economics Notes\n\n"
+        "Pricing, margins, and infrastructure moats.\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(cli, "REPO_ROOT", repo_root)
@@ -40,13 +56,20 @@ def create_test_app(tmp_path: Path, monkeypatch) -> TestClient:
     return TestClient(ui_app.create_app())
 
 
-def write_inbox_file(inbox_dir: Path, filename: str, action: str, extra: str = "") -> Path:
+def write_inbox_file(
+    inbox_dir: Path,
+    filename: str,
+    action: str,
+    extra: str = "",
+    annotation: str | None = None,
+) -> Path:
     path = inbox_dir / filename
     target_line = (
         '  target_entry: "OpenClaw & AI Agentic Systems — Knowledge Base"\n'
         if action == "append-to"
         else ""
     )
+    annotation_line = f'  annotation: "{annotation}"\n' if annotation else ""
     path.write_text(
         "---\n"
         "proposal:\n"
@@ -56,6 +79,7 @@ def write_inbox_file(inbox_dir: Path, filename: str, action: str, extra: str = "
         "  topics: [agent-architecture, openclaw]\n"
         "  why_kept: |\n"
         "    Worth keeping.\n"
+        f"{annotation_line}"
         f"{target_line}"
         "  reasoning: |\n"
         "    Because.\n"
@@ -87,6 +111,30 @@ def test_root_renders_and_inbox_json_lists_items(tmp_path: Path, monkeypatch) ->
     payload = json_response.json()
     assert payload["items"][0]["title"] == "Test Proposal"
     assert payload["inbox_count"] == 1
+
+
+def test_root_inline_script_is_valid_javascript(tmp_path: Path, monkeypatch) -> None:
+    node = shutil.which("node")
+    if node is None:
+        return
+
+    client = create_test_app(tmp_path, monkeypatch)
+    write_inbox_file(cli.INBOX_DIR, "2026-04-30-test.md", "new-entry")
+
+    response = client.get("/")
+    assert response.status_code == 200
+
+    match = re.search(r"<script>\s*(.*?)\s*</script>", response.text, re.DOTALL)
+    assert match is not None
+
+    compiled = subprocess.run(
+        [node, "-e", "new Function(process.argv[1]);", match.group(1)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert compiled.returncode == 0, compiled.stderr
 
 
 def test_detail_endpoint_handles_new_entry_and_append_to(tmp_path: Path, monkeypatch) -> None:
@@ -130,6 +178,269 @@ def test_book_entries_endpoint_excludes_scaffold_files(tmp_path: Path, monkeypat
     assert "CONVENTIONS" not in titles
 
 
+def test_book_detail_endpoint_returns_canonical_entry_summary(tmp_path: Path, monkeypatch) -> None:
+    client = create_test_app(tmp_path, monkeypatch)
+
+    response = client.get("/book/Agent%20Economics%20Notes.md")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["entry"]["title"] == "Agent Economics Notes"
+    assert payload["entry"]["kind"] == "idea-study"
+    assert "agent-economics" in payload["entry"]["topics"]
+    assert "<h1>Agent Economics Notes</h1>" in payload["body_html"]
+
+
+def test_book_annotations_can_be_updated(tmp_path: Path, monkeypatch) -> None:
+    client = create_test_app(tmp_path, monkeypatch)
+
+    response = client.put(
+        "/book/Agent%20Economics%20Notes.md/annotations",
+        json={"annotations": "This is the market map.\nWatch pricing compression."},
+    )
+    payload = response.json()
+    saved_text = (cli.BOOK_DIR / "Agent Economics Notes.md").read_text(encoding="utf-8")
+
+    assert response.status_code == 200
+    assert payload["entry"]["annotations"] == [
+        "This is the market map.",
+        "Watch pricing compression.",
+    ]
+    assert "annotations:" in saved_text
+    assert "This is the market map." in saved_text
+
+
+def test_chat_endpoint_uses_stubbed_answer(tmp_path: Path, monkeypatch) -> None:
+    client = create_test_app(tmp_path, monkeypatch)
+
+    def fake_answer(query: str, client=None) -> dict[str, object]:
+        assert query == "How does OpenClaw fit into agent architecture?"
+        return {
+            "answer": "**OpenClaw** sits in the agent architecture layer.",
+            "answer_html": "<p><strong>OpenClaw</strong> sits in the agent architecture layer.</p>",
+            "matched_entries": [
+                {
+                    "filename": "OpenClaw & AI Agentic Systems — Knowledge Base.md",
+                    "title": "OpenClaw & AI Agentic Systems — Knowledge Base",
+                    "kind": "field-study",
+                    "topics": ["openclaw", "agent-architecture"],
+                    "related_entries": ["Agent Economics Notes"],
+                }
+            ],
+            "model": "test-model",
+        }
+
+    monkeypatch.setattr(ui_app, "answer_commonplace_query", fake_answer)
+
+    response = client.post("/chat", json={"query": "How does OpenClaw fit into agent architecture?"})
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["answer"] == "**OpenClaw** sits in the agent architecture layer."
+    assert "<strong>OpenClaw</strong>" in payload["answer_html"]
+    assert payload["matched_entries"][0]["title"] == "OpenClaw & AI Agentic Systems — Knowledge Base"
+
+
+def test_chat_router_prefers_metadata_matches_and_expands_related_entries(tmp_path: Path, monkeypatch) -> None:
+    create_test_app(tmp_path, monkeypatch)
+    entries = ui_app.load_chat_book_entries()
+
+    matched = ui_app.route_query_to_entries(
+        "What does the book say about OpenClaw and agent architecture?",
+        entries,
+    )
+
+    titles = [entry.title for entry in matched]
+    assert titles[0] == "OpenClaw & AI Agentic Systems — Knowledge Base"
+    assert "Agent Economics Notes" in titles
+
+
+def test_build_chat_prompt_asks_for_labeled_inference_when_direct_match_is_missing() -> None:
+    entry = ui_app.ChatBookEntry(
+        path=Path("Catalog Entry.md"),
+        title="Catalog Entry",
+        kind="field-study",
+        why_kept="Tracks how the book reasons about infrastructure.",
+        topics=["infrastructure", "agents"],
+        related_entries=["Agent Economics Notes"],
+        annotations=["Watch how standards form."],
+        body=None,
+    )
+
+    prompt = ui_app.build_chat_prompt(
+        query="What would the book think about a new protocol market?",
+        entries=[entry],
+        mode="catalog-inference",
+    )
+
+    assert "does not appear to contain a directly matched entry" in prompt
+    assert "first say that the book does not directly address it" in prompt
+    assert "clearly labeled inference" in prompt
+    assert "Commonplace catalog snapshot:" in prompt
+
+
+def test_query_requests_annotations_detects_notes_and_point_of_view_language() -> None:
+    assert ui_app.query_requests_annotations("What do my annotations say about this?") is True
+    assert ui_app.query_requests_annotations("What is my point of view here?") is True
+    assert ui_app.query_requests_annotations("Summarize the notes on this entry") is True
+    assert ui_app.query_requests_annotations("How does OpenClaw fit into agent architecture?") is False
+
+
+def test_build_chat_prompt_adds_annotation_pov_context_when_requested() -> None:
+    entry = ui_app.ChatBookEntry(
+        path=Path("Agent Economics Notes.md"),
+        title="Agent Economics Notes",
+        kind="idea-study",
+        why_kept="Tracks economic patterns in agent infrastructure.",
+        topics=["agent-economics", "ai-investment"],
+        related_entries=["OpenClaw & AI Agentic Systems — Knowledge Base"],
+        annotations=["This is the market map.", "Watch pricing compression."],
+        body="Pricing, margins, and infrastructure moats.",
+    )
+
+    prompt = ui_app.build_chat_prompt(
+        query="What do my annotations suggest is my point of view on this?",
+        entries=[entry],
+        mode="matched-entries",
+        emphasize_annotations=True,
+    )
+
+    assert "The user is explicitly asking about notes, annotations, or point of view." in prompt
+    assert "User point-of-view from annotations:" in prompt
+    assert "Treat these notes as the clearest available signal" in prompt
+    assert "- Agent Economics Notes: This is the market map. | Watch pricing compression." in prompt
+
+
+def test_build_chat_prompt_handles_annotation_request_without_any_saved_notes() -> None:
+    entry = ui_app.ChatBookEntry(
+        path=Path("Catalog Entry.md"),
+        title="Catalog Entry",
+        kind="field-study",
+        why_kept="Tracks how the book reasons about infrastructure.",
+        topics=["infrastructure", "agents"],
+        related_entries=[],
+        annotations=[],
+        body=None,
+    )
+
+    prompt = ui_app.build_chat_prompt(
+        query="What is my point of view here?",
+        entries=[entry],
+        mode="matched-entries",
+        emphasize_annotations=True,
+    )
+
+    assert "(No explicit annotations were supplied for these entries." in prompt
+
+
+def test_answer_commonplace_query_uses_catalog_inference_when_no_entry_matches(tmp_path: Path, monkeypatch) -> None:
+    create_test_app(tmp_path, monkeypatch)
+
+    class FakeResponses:
+        def __init__(self) -> None:
+            self.captured_input = None
+
+        def create(self, *, model, input):
+            self.captured_input = input
+            return type(
+                "Response",
+                (),
+                {
+                    "output": [
+                        type(
+                            "Message",
+                            (),
+                            {
+                                "type": "message",
+                                "content": [
+                                    type(
+                                        "OutputText",
+                                        (),
+                                        {
+                                            "type": "output_text",
+                                            "text": (
+                                                "The book does not directly address that yet.\n\n"
+                                                "Possible inference from the book's current concerns: "
+                                                "it would likely examine market structure, standards, and moats."
+                                            ),
+                                        },
+                                    )()
+                                ],
+                            },
+                        )()
+                    ]
+                },
+            )()
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.responses = FakeResponses()
+
+    fake_client = FakeClient()
+    answer = ui_app.answer_commonplace_query(
+        query="What would the book think about decentralized sensor markets?",
+        client=fake_client,
+    )
+
+    user_prompt = fake_client.responses.captured_input[1]["content"]
+    assert "does not appear to contain a directly matched entry" in user_prompt
+    assert "Commonplace catalog snapshot:" in user_prompt
+    assert answer["matched_entries"] == []
+    assert "does not directly address" in answer["answer"]
+    assert answer["model"] == ui_app.CHAT_MODEL
+
+
+def test_answer_commonplace_query_includes_annotation_pov_when_query_targets_notes(tmp_path: Path, monkeypatch) -> None:
+    create_test_app(tmp_path, monkeypatch)
+
+    class FakeResponses:
+        def __init__(self) -> None:
+            self.captured_input = None
+
+        def create(self, *, model, input):
+            self.captured_input = input
+            return type(
+                "Response",
+                (),
+                {
+                    "output": [
+                        type(
+                            "Message",
+                            (),
+                            {
+                                "type": "message",
+                                "content": [
+                                    type(
+                                        "OutputText",
+                                        (),
+                                        {
+                                            "type": "output_text",
+                                            "text": "Your notes emphasize market structure and pricing pressure.",
+                                        },
+                                    )()
+                                ],
+                            },
+                        )()
+                    ]
+                },
+            )()
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.responses = FakeResponses()
+
+    fake_client = FakeClient()
+    answer = ui_app.answer_commonplace_query(
+        query="What do my annotations say about agent economics?",
+        client=fake_client,
+    )
+
+    user_prompt = fake_client.responses.captured_input[1]["content"]
+    assert "User point-of-view from annotations:" in user_prompt
+    assert "The user is explicitly asking about notes, annotations, or point of view." in user_prompt
+    assert answer["answer"] == "Your notes emphasize market structure and pricing pressure."
+
+
 def test_put_inbox_updates_editable_fields_and_preserves_audit_fields(tmp_path: Path, monkeypatch) -> None:
     client = create_test_app(tmp_path, monkeypatch)
     write_inbox_file(cli.INBOX_DIR, "edit.md", "new-entry")
@@ -141,6 +452,7 @@ def test_put_inbox_updates_editable_fields_and_preserves_audit_fields(tmp_path: 
             "kind": "field-study",
             "topics": "edited, focused",
             "why_kept": "Still worth keeping.",
+            "annotation": "I want to remember the framing shift here.",
             "action": "new-entry",
             "target_entry": "should be ignored",
             "body": "# Edited Proposal\n\nRewritten body.\n",
@@ -154,6 +466,7 @@ def test_put_inbox_updates_editable_fields_and_preserves_audit_fields(tmp_path: 
     assert payload["proposal"]["kind"] == "field-study"
     assert payload["proposal"]["topics"] == ["edited", "focused"]
     assert payload["proposal"]["why_kept"] == "Still worth keeping."
+    assert payload["proposal"]["annotation"] == "I want to remember the framing shift here."
     assert payload["proposal"]["action"] == "new-entry"
     assert payload["proposal"]["target_entry"] is None
     assert payload["body_markdown"] == "# Edited Proposal\n\nRewritten body.\n"
@@ -164,6 +477,36 @@ def test_put_inbox_updates_editable_fields_and_preserves_audit_fields(tmp_path: 
     assert "last_edited_at:" in saved_text
     assert "escalation_triggers:" in saved_text
     assert "source_path: /tmp/source.pdf" in saved_text
+
+
+def test_put_inbox_allows_annotation_only_update(tmp_path: Path, monkeypatch) -> None:
+    client = create_test_app(tmp_path, monkeypatch)
+    write_inbox_file(cli.INBOX_DIR, "annotate.md", "new-entry")
+
+    response = client.put(
+        "/inbox/annotate.md",
+        json={"annotation": "This is the connective note I want to preserve."},
+    )
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["proposal"]["annotation"] == "This is the connective note I want to preserve."
+    assert payload["proposal"]["title"] == "Test Proposal"
+    assert payload["proposal"]["action"] == "new-entry"
+
+
+def test_put_inbox_accepts_capitalized_annotation_key(tmp_path: Path, monkeypatch) -> None:
+    client = create_test_app(tmp_path, monkeypatch)
+    write_inbox_file(cli.INBOX_DIR, "annotate-case.md", "new-entry")
+
+    response = client.put(
+        "/inbox/annotate-case.md",
+        json={"Annotation": "Capitalized key should still save."},
+    )
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["proposal"]["annotation"] == "Capitalized key should still save."
 
 
 def test_put_inbox_rejects_unknown_fields_invalid_action_and_bad_append_target(tmp_path: Path, monkeypatch) -> None:
@@ -203,6 +546,7 @@ def test_put_inbox_switch_to_append_to_then_promote_appends_to_target(tmp_path: 
             "kind": "idea-study",
             "topics": ["agent-architecture", "openclaw"],
             "why_kept": "Append it.",
+            "annotation": "Useful connective tissue for the OpenClaw knowledge base.",
             "action": "append-to",
             "target_entry": "OpenClaw & AI Agentic Systems — Knowledge Base",
             "body": "## Appended Section\n\nAdded from edited inbox proposal.\n",
@@ -217,13 +561,15 @@ def test_put_inbox_switch_to_append_to_then_promote_appends_to_target(tmp_path: 
     assert not (cli.INBOX_DIR / "switch.md").exists()
     assert "## Appended Section" in updated_target_text
     assert "Added from edited inbox proposal." in updated_target_text
-    assert updated_target_text.startswith(original_target_text.rstrip())
+    assert "Useful connective tissue for the OpenClaw knowledge base." in updated_target_text
+    assert "# OpenClaw" in updated_target_text
+    assert "related-entries:" in updated_target_text
 
 
 def test_promote_endpoint_and_flag_for_judgment_refusal(tmp_path: Path, monkeypatch) -> None:
     client = create_test_app(tmp_path, monkeypatch)
     inbox_dir = cli.INBOX_DIR
-    write_inbox_file(inbox_dir, "new.md", "new-entry")
+    write_inbox_file(inbox_dir, "new.md", "new-entry", annotation="Worth keeping for later recall.")
     write_inbox_file(inbox_dir, "flag.md", "flag-for-judgment")
 
     ok_response = client.post("/inbox/new.md/promote", json={"copy": False})
@@ -233,6 +579,16 @@ def test_promote_endpoint_and_flag_for_judgment_refusal(tmp_path: Path, monkeypa
     refused = client.post("/inbox/flag.md/promote", json={"copy": False})
     assert refused.status_code == 400
     assert "flag-for-judgment" in refused.json()["detail"]
+
+
+def test_promote_endpoint_requires_annotation(tmp_path: Path, monkeypatch) -> None:
+    client = create_test_app(tmp_path, monkeypatch)
+    write_inbox_file(cli.INBOX_DIR, "missing-annotation.md", "new-entry")
+
+    response = client.post("/inbox/missing-annotation.md/promote", json={"copy": False})
+
+    assert response.status_code == 400
+    assert "Cannot promote without an annotation" in response.json()["detail"]
 
 
 def test_discard_moves_file_into_dated_archive(tmp_path: Path, monkeypatch) -> None:
